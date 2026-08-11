@@ -14,5 +14,5 @@
  */
 window.CONFIG = {
   SUPABASE_URL: 'https://ukgygzvyzygummbeobmk.supabase.co',
-  SUPABASE_ANON_KEY: ''
+  SUPABASE_ANON_KEY: 'sb_publishable_s5SCRXj7kRVWECJ5Q7vq_g_bezfkprV'
 };

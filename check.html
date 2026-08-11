@@ -71,6 +71,13 @@ h1{font-family:var(--display);font-size:27px;font-weight:800;letter-spacing:-.03
     <p id="micNote" style="margin-top:12px"></p>
   </div>
 
+  <div class="mic">
+    <h2>The database</h2>
+    <p>Whether this browser can reach Supabase, sign in, and read the tables.</p>
+    <button class="btn" id="dbBtn">Test the database</button>
+    <div id="dbOut" style="margin-top:14px"></div>
+  </div>
+
   <div class="out">
     <div class="sl">Results — copy this and send it over</div>
     <textarea id="report" readonly aria-label="Results"></textarea>
@@ -80,6 +87,8 @@ h1{font-family:var(--display);font-size:27px;font-weight:800;letter-spacing:-.03
   <p class="foot">Nothing here is stored or sent anywhere. <a href="index.html">Back to the app &rarr;</a></p>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
 <script>
 (function(){
   var rows=document.getElementById('rows'), results={};
@@ -209,7 +218,78 @@ h1{font-family:var(--display);font-size:27px;font-weight:800;letter-spacing:-.03
     ta.value=lines.join('\n');
   }
   results.microphone={status:'idle',detail:'not run yet'};
+  results.database={status:'idle',detail:'not run yet'};
   report();
+
+  /* ── the database ──
+     Reports the specific reason it failed, because "it doesn't work" costs
+     a round trip and "anonymous sign-ins are switched off" does not. */
+  var dbBtn=document.getElementById('dbBtn'), dbOut=document.getElementById('dbOut');
+
+  function line(status,label,detail){
+    var r=document.createElement('div'); r.className='row'; r.style.borderTop='0';
+    var t=document.createElement('span'); t.className='tag '+status;
+    t.textContent={pass:'yes',fail:'no',warn:'maybe'}[status];
+    var b=document.createElement('div'); b.className='rb';
+    var h=document.createElement('div'); h.className='rt'; h.textContent=label;
+    var d=document.createElement('div'); d.className='rd'; d.textContent=detail;
+    b.appendChild(h); b.appendChild(d); r.appendChild(t); r.appendChild(b);
+    dbOut.appendChild(r);
+  }
+
+  function explain(err){
+    var m=((err&&err.message)||String(err)||'').toLowerCase();
+    if(m.indexOf('anonymous')>-1)
+      return 'Anonymous sign-ins are switched off. Supabase → Authentication → Sign In / Providers → turn on "Allow anonymous sign-ins".';
+    if(m.indexOf('could not find the table')>-1 || m.indexOf('does not exist')>-1 || m.indexOf('schema cache')>-1)
+      return 'The tables are missing — schema.sql has not been run yet. Supabase → SQL Editor → paste schema.sql → Run.';
+    if(m.indexOf('invalid api key')>-1 || m.indexOf('jwt')>-1)
+      return 'The key is wrong. Copy the Publishable key again from Settings → API.';
+    if(m.indexOf('failed to fetch')>-1 || m.indexOf('networkerror')>-1)
+      return 'Could not reach the project at all — check the Project URL, or the network is blocking it.';
+    return (err&&err.message)||String(err);
+  }
+
+  dbBtn.onclick=function(){
+    dbOut.textContent=''; dbBtn.disabled=true; dbBtn.textContent='Testing…';
+    var cfg=window.CONFIG||{};
+    function done(status,detail){
+      results.database={status:status,detail:detail};
+      report(); dbBtn.disabled=false; dbBtn.textContent='Test the database';
+    }
+    if(!cfg.SUPABASE_URL||!cfg.SUPABASE_ANON_KEY){
+      line('fail','Configured','config.js is still blank — the app is running on this device only.');
+      return done('fail','not configured');
+    }
+    if(!window.supabase){
+      line('fail','Supabase library','Could not load. Something is blocking cdn.jsdelivr.net.');
+      return done('fail','library blocked');
+    }
+    line('pass','Configured', cfg.SUPABASE_URL);
+    var client=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
+
+    client.auth.signInAnonymously().then(function(r){
+      if(r.error) throw r.error;
+      line('pass','Signing in','Anonymous account created — id ends '+r.data.user.id.slice(-6));
+      var tables=['profiles','messages','notices'];
+      return Promise.all(tables.map(function(t){
+        return client.from(t).select('*',{count:'exact',head:true})
+          .then(function(x){ return {t:t,err:x.error,count:x.count}; });
+      }));
+    }).then(function(rows){
+      var bad=rows.filter(function(x){return x.err;});
+      rows.forEach(function(x){
+        if(x.err) line('fail','Table: '+x.t, explain(x.err));
+        else line('pass','Table: '+x.t, (x.count||0)+' row'+(x.count===1?'':'s'));
+      });
+      if(bad.length) return done('fail', bad.length+' table(s) missing');
+      line('pass','Ready','Everything is connected. Messages will be shared.');
+      done('pass','connected, all tables present');
+    }).catch(function(err){
+      line('fail','Connecting', explain(err));
+      done('fail', (err&&err.message)||'failed');
+    });
+  };
 
   document.getElementById('copy').onclick=function(){
     ta.select();
