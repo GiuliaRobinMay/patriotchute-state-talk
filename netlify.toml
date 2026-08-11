@@ -1,5 +1,5 @@
 [build]
-  publish = "public"
+  publish = "."
   command = ""
 
 # The app is meant to be embedded in Mighty Networks, so the default

@@ -11,17 +11,11 @@ what the browser allows before committing to a database.
 
 ## Putting it online
 
-No accounts, no build step, no configuration.
+No build step and nothing to configure. The site files sit at the repository
+root, so any static host serves them as-is — Vercel and Netlify both work with
+their default settings. Everything lives on `main`.
 
-1. Go to [app.netlify.com](https://app.netlify.com) → **Add new site** → **Import
-   an existing project**.
-2. Pick GitHub, then this repository, then the branch
-   `claude/state-chat-community-app-x525hu`.
-3. Leave every build setting alone — `netlify.toml` already says the site is the
-   `public` folder and there is nothing to compile. Press **Deploy**.
-
-You'll get a URL like `https://something-random.netlify.app`. That's the link to
-embed.
+Push to `main` and the host redeploys. That's the whole loop.
 
 ## What to test, in order
 
@@ -44,12 +38,13 @@ exist.
 ## What's here
 
 ```
-public/index.html   the app
-public/app.js       all of its behaviour
-public/app.css      the whole visual system
-public/states.js    the 51 rooms, and placeholder headcounts
-public/check.html   the embed diagnostics page
-netlify.toml        publish folder and the headers that let it be framed
+index.html    the app
+app.js        all of its behaviour
+app.css       the whole visual system
+states.js     the 51 rooms, and placeholder headcounts
+check.html    the embed diagnostics page
+vercel.json   headers that let the app be framed by your community
+netlify.toml  the same, if the site ever moves to Netlify
 ```
 
 ## What comes next
