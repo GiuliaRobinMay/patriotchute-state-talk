@@ -296,19 +296,29 @@
 
   /* ── chat ────────────────────────────────────────────────────── */
   function messageEl(m) {
-    var wrap = document.createElement('div'); wrap.className = 'm';
-    var av = document.createElement('span'); av.className = 'av sm';
-    avatar(av, m);
+    var wrap = document.createElement('div'); wrap.className = 'm' + (m.mine ? ' mine' : '');
     var b = document.createElement('div'); b.className = 'b';
     var h = document.createElement('div'); h.className = 'h';
-    var who = document.createElement('span'); who.className = 'who'; who.textContent = m.name;
-    h.appendChild(who);
-    if (m.city) { var cy = document.createElement('span'); cy.className = 'cy'; cy.textContent = m.city; h.appendChild(cy); }
+
+    /* Your own messages carry only a time. The side of the screen already
+       says who wrote them, and your name on every line is just noise. */
+    if (!m.mine) {
+      var who = document.createElement('span'); who.className = 'who'; who.textContent = m.name;
+      h.appendChild(who);
+      if (m.city) { var cy = document.createElement('span'); cy.className = 'cy'; cy.textContent = m.city; h.appendChild(cy); }
+    }
     var tm = document.createElement('span'); tm.className = 'tm'; tm.textContent = clock(m.ts);
     h.appendChild(tm);
+
     var tx = document.createElement('div'); tx.className = 'tx'; tx.textContent = m.text;
     b.appendChild(h); b.appendChild(tx);
-    wrap.appendChild(av); wrap.appendChild(b);
+
+    if (!m.mine) {
+      var av = document.createElement('span'); av.className = 'av sm';
+      avatar(av, m);
+      wrap.appendChild(av);
+    }
+    wrap.appendChild(b);
     return wrap;
   }
 
@@ -349,7 +359,7 @@
     i.value = '';
     var msg = {
       name: me.name, city: me.city, photo: me.photo,
-      bg: me.bg, fg: me.fg, text: text, ts: Date.now()
+      bg: me.bg, fg: me.fg, text: text, ts: Date.now(), mine: true
     };
     appendMessage(msg);                          // show it immediately
     $('chat').scrollTop = $('chat').scrollHeight;

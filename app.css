@@ -179,7 +179,17 @@ button,input,select,textarea{font-family:inherit}
 .m .who{font-size:13px;font-weight:700;color:var(--text);letter-spacing:-.01em}
 .m .cy{font-family:var(--mono);font-size:9.5px;color:var(--faint);letter-spacing:.04em}
 .m .tm{font-family:var(--mono);font-size:10px;color:var(--faint2);font-variant-numeric:tabular-nums}
-.m .tx{font-size:13.5px;color:#C6CDDC;line-height:1.5;overflow-wrap:anywhere;white-space:pre-wrap}
+.m .tx{font-size:13.5px;color:#C6CDDC;line-height:1.5;overflow-wrap:anywhere;white-space:pre-wrap;
+  background:var(--panel);border:1px solid var(--edge);border-radius:12px 12px 12px 3px;
+  padding:7px 11px;display:inline-block;max-width:min(88%,560px);text-align:left}
+
+/* Your own messages come back down the right-hand side, in the app's own
+   red, so a glance tells you which half of the conversation is yours. */
+.m.mine{justify-content:flex-end}
+.m.mine .h{justify-content:flex-end}
+.m.mine .b{text-align:right}
+.m.mine .tx{background:rgba(191,59,46,.14);border-color:rgba(191,59,46,.34);color:#E7DAD6;
+  border-radius:12px 12px 3px 12px}
 .sys{font-family:var(--mono);font-size:10.5px;color:var(--faint2);text-align:center;padding:2px 0}
 .sys.pin{color:var(--gold)}
 /* ⋯ menu in the room header */

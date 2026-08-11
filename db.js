@@ -46,7 +46,12 @@
 
     signOut: function () { put('profile', null); return Promise.resolve(); },
 
-    messages: function (room) { return Promise.resolve(get('msgs.' + room, [])); },
+    /* Nobody else exists in preview mode, so every message is yours. */
+    messages: function (room) {
+      return Promise.resolve(get('msgs.' + room, []).map(function (m) {
+        m.mine = true; return m;
+      }));
+    },
 
     send: function (room, msg) {
       var all = get('msgs.' + room, []);
@@ -96,6 +101,7 @@
         fg: (who && who.fg) || r.fg,
         photo: (who && who.photo) || r.photo,
         text: r.body,
+        mine: r.author === uid,
         ts: new Date(r.created_at).getTime()
       };
     }
