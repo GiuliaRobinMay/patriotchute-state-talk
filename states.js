@@ -24,6 +24,19 @@ window.STATES = [
 /* Rooms shown as "live" in the preview. Replaced by real voice presence later. */
 window.LIVE_SEED = ["OH","TX","FL","PA","MI","NC","GA","AZ"];
 
+/* Example members, shown until the database is connected so the roster design
+   can be judged. Every one of these disappears the moment real people exist. */
+window.SAMPLE_PEOPLE = [
+  {name:"Bee Ann",     city:"Akron",      online:true},
+  {name:"Tom Hargrove",city:"Dayton",     online:true},
+  {name:"Kris N.",     city:"Toledo",     online:true},
+  {name:"Marcus P.",   city:"Dayton",     online:false},
+  {name:"Joan L.",     city:"Columbus",   online:false},
+  {name:"Sam K.",      city:"Cincinnati", online:false},
+  {name:"Pat Whitfield",city:"Cleveland", online:false},
+  {name:"Elena G.",    city:"Akron",      online:false}
+];
+
 /* Avatar colours, paired so text stays legible on each. */
 window.AV_COLORS = [
   {bg:"#BF3B2E",fg:"#FBF8F2"},{bg:"#2E8B7C",fg:"#03150F"},{bg:"#4A6FA5",fg:"#F4F1EA"},

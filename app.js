@@ -173,7 +173,7 @@
     var grid = $('grid');
     q = (q || '').trim().toLowerCase();
     grid.textContent = '';
-    var list = S.filter(function (s) {
+    var list = myStates().filter(function (s) {
       return !q || s.n.toLowerCase().indexOf(q) === 0 || s.a.toLowerCase() === q;
     });
     if (!list.length) {
@@ -202,12 +202,23 @@
   };
 
   /* ── the rail ────────────────────────────────────────────── */
+  /* Members belong to one state. The rail lists only their own room, plus a
+     way out if they move house — browsing all 51 was making the app feel like
+     a directory rather than somewhere you live. Hosts still see everything. */
+  function myStates() {
+    if (!me) return S;
+    if (me.host) return S;
+    return S.filter(function (s) { return s.a === me.state; });
+  }
+
   function drawRail() {
     var rail = $('rail');
     rail.textContent = '';
-    var l = document.createElement('div'); l.className = 'rl'; l.textContent = 'All states';
+    var mine = myStates();
+    var l = document.createElement('div'); l.className = 'rl';
+    l.textContent = me && !me.host ? 'Your state' : 'All states';
     rail.appendChild(l);
-    S.forEach(function (s) {
+    mine.forEach(function (s) {
       var b = document.createElement('button');
       b.type = 'button';
       b.className = 'ri' + (s.a === room.a ? ' cur' : '') + (LIVE.indexOf(s.a) > -1 ? ' on' : '');
@@ -218,6 +229,28 @@
       b.onclick = function () { openRoom(s); };
       rail.appendChild(b);
     });
+    if (me && !me.host) {
+      var move = document.createElement('button');
+      move.type = 'button'; move.className = 'ri';
+      move.style.marginTop = '10px'; move.style.color = 'var(--faint)';
+      move.textContent = 'I’ve moved state';
+      move.onclick = changeState;
+      rail.appendChild(move);
+    }
+  }
+
+  function changeState() {
+    var name = prompt('Which state are you in now?', byAbbr(me.state).n);
+    if (!name) return;
+    var q = name.trim().toLowerCase();
+    var found = null;
+    S.forEach(function (s) {
+      if (s.n.toLowerCase() === q || s.a.toLowerCase() === q) found = s;
+    });
+    if (!found) { alert('I don’t recognise “' + name + '”. Try the full state name.'); return; }
+    me.state = found.a;
+    put('profile', me);
+    openRoom(found);
   }
 
   /* ── a room ──────────────────────────────────────────────── */
@@ -282,33 +315,156 @@
     i.value = '';
   };
 
+  /* Roster: online first with a green dot, then everyone else in the state.
+     Big states run to hundreds of members, so the offline list is capped —
+     a scroll of 390 grey names tells you nothing you wanted to know. */
+  var OFFLINE_SHOWN = 25;
+
+  function personRow(p, isYou) {
+    var row = document.createElement('div');
+    row.className = 'wp' + (p.online || isYou ? '' : ' off');
+    var av = document.createElement('span'); av.className = 'av xs';
+    avatar(av, {
+      name: p.name, photo: p.photo,
+      bg: p.bg || COLORS[p.name.length % COLORS.length].bg,
+      fg: p.fg || COLORS[p.name.length % COLORS.length].fg
+    });
+    var t = document.createElement('span'); t.className = 't';
+    var n = document.createElement('span'); n.className = 'n';
+    n.textContent = p.name + (isYou ? ' (you)' : '');
+    t.appendChild(n);
+    if (p.city) { var c = document.createElement('span'); c.className = 'c'; c.textContent = p.city; t.appendChild(c); }
+    row.appendChild(av); row.appendChild(t);
+    if (p.online || isYou) { var d = document.createElement('span'); d.className = 'mk'; d.textContent = '●'; row.appendChild(d); }
+    return row;
+  }
+
+  function label(text) {
+    var l = document.createElement('div'); l.className = 'wl'; l.textContent = text;
+    return l;
+  }
+
   function drawWho() {
     var w = $('whoList');
     w.textContent = '';
-    var l = document.createElement('div'); l.className = 'wl';
-    l.textContent = 'Here · ' + headcount(room);
-    w.appendChild(l);
-    if (me) {
-      var row = document.createElement('div'); row.className = 'wp';
-      var av = document.createElement('span'); av.className = 'av xs'; avatar(av, me);
-      var t = document.createElement('span'); t.className = 't';
-      var n = document.createElement('span'); n.className = 'n'; n.textContent = me.name + ' (you)';
-      t.appendChild(n);
-      if (me.city) { var c = document.createElement('span'); c.className = 'c'; c.textContent = me.city; t.appendChild(c); }
-      row.appendChild(av); row.appendChild(t);
-      w.appendChild(row);
+
+    var sample = window.SAMPLE_PEOPLE || [];
+    var online = sample.filter(function (p) { return p.online; });
+    var offline = sample.filter(function (p) { return !p.online; });
+    var total = headcount(room);
+
+    w.appendChild(label('Online · ' + (online.length + (me ? 1 : 0))));
+    if (me) w.appendChild(personRow(me, true));
+    online.forEach(function (p) { w.appendChild(personRow(p)); });
+
+    w.appendChild(label('Also in ' + room.n + ' · ' + total));
+    offline.slice(0, OFFLINE_SHOWN).forEach(function (p) { w.appendChild(personRow(p)); });
+
+    var rest = total - offline.slice(0, OFFLINE_SHOWN).length - online.length - (me ? 1 : 0);
+    if (rest > 0) {
+      var more = document.createElement('p');
+      more.className = 'hint'; more.style.padding = '9px 6px 0';
+      more.textContent = '+ ' + rest.toLocaleString('en-US') + ' more';
+      w.appendChild(more);
     }
+
     var note = document.createElement('p');
-    note.className = 'hint'; note.style.padding = '10px 6px 0';
-    note.textContent = 'Everyone else appears once the database is connected.';
+    note.className = 'hint';
+    note.style.cssText = 'padding:12px 6px 0;border-top:1px solid var(--line);margin-top:10px';
+    note.textContent = 'Example members — real ones appear once the database is connected.';
     w.appendChild(note);
   }
 
+  /* ── emoji ───────────────────────────────────────────────
+     Deliberately a small fixed set rather than a full picker: the whole
+     Unicode catalogue is a search box nobody wants in a chat this simple. */
+  var EMOJI = ('😀 😂 🙂 😉 😍 🤔 😅 😮 😢 🙃 😎 🥳 👋 👍 👎 🙌 👏 🤝 💪 🙏 ❤️ 🔥 ⭐ ✅ ❌ ☕ 🎉 🎂 🚗 🏡 ☀️ 🌧️ ❄️ 🇺🇸 📌 ⏰').split(' ');
+  var tray = $('emoji'), emjBtn = $('emjBtn');
+
+  EMOJI.forEach(function (ch) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.textContent = ch; b.setAttribute('aria-label', ch);
+    b.onclick = function () {
+      var i = $('ci');
+      i.value = i.value + (i.value && !/\s$/.test(i.value) ? ' ' : '') + ch;
+      i.focus();
+    };
+    tray.appendChild(b);
+  });
+
+  function toggleTray(open) {
+    tray.hidden = !open;
+    emjBtn.setAttribute('aria-expanded', String(open));
+  }
+  emjBtn.onclick = function () { toggleTray(tray.hidden); };
+
+  /* ── the ⋯ menu ──────────────────────────────────────────── */
+  var meMenu = $('meMenu'), meBtn2 = $('meBtn2');
+  function toggleMenu(open) {
+    meMenu.hidden = !open;
+    meBtn2.setAttribute('aria-expanded', String(open));
+  }
+  meBtn2.onclick = function (e) { e.stopPropagation(); toggleMenu(meMenu.hidden); };
+  document.addEventListener('click', function () { toggleMenu(false); });
+  meMenu.onclick = function (e) { e.stopPropagation(); };
+  $('mMove').onclick = function () { toggleMenu(false); changeState(); };
+  $('mOut').onclick = function () {
+    toggleMenu(false);
+    if (!confirm('Sign out and set up again on this device?')) return;
+    put('profile', null); me = null; show('vJoin');
+  };
+
   /* ── the microphone ──────────────────────────────────────
-     This is the real test. In a cross-origin iframe the browser blocks
-     getUserMedia unless the hosting page opted in, and it fails the same
-     way a user denial does. We report which it was, plainly. */
+     Measured on the real community (11 Aug 2026): Mighty Networks does not
+     pass microphone permission into the frame, so getUserMedia in the embed
+     fails with NotAllowedError no matter what the member does.
+
+     So when we are embedded and the policy says no, we don't ask and fail —
+     we open the room in its own tab, where the microphone works normally and
+     the member is already signed in. One extra tap instead of a dead end. If
+     a host ever does grant the permission, the check below sees it and voice
+     happens inline as it should. */
   var micStream = null, micBtn = $('micBtn');
+
+  var framed = true;
+  try { framed = window.self !== window.top; } catch (e) { framed = true; }
+
+  function micPermitted() {
+    try {
+      if (document.featurePolicy && document.featurePolicy.allowsFeature) {
+        return document.featurePolicy.allowsFeature('microphone');
+      }
+    } catch (e) {}
+    return null;              // browser won't say — worth trying
+  }
+
+  function popOut() {
+    /* No 'noopener' feature here: it forces window.open to return null, which
+       would make every successful pop-out look like a blocked one. Sever the
+       link afterwards instead — same origin, so this is allowed. */
+    var w = window.open(location.origin + location.pathname + '?voice=' + room.a, '_blank');
+    try { if (w) w.opener = null; } catch (e) {}
+    if (!w) {
+      micBtn.className = 'jn err';
+      micBtn.textContent = 'Allow pop-ups to talk';
+      $('vNames').textContent = 'Your browser blocked the new tab — allow pop-ups for this site';
+      return;
+    }
+    micBtn.className = 'jn out';
+    micBtn.textContent = '🎙 Talking in the other tab';
+    $('vNames').textContent = 'Voice opened in its own tab — chat carries on here';
+  }
+
+  function startMic() {
+    micBtn.textContent = 'Asking…';
+    return navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      micStream = stream;
+      micBtn.className = 'jn out';
+      micBtn.textContent = 'Leave the mic';
+      renderMics();
+      meter(stream);
+    });
+  }
 
   micBtn.onclick = function () {
     if (micStream) {
@@ -324,23 +480,21 @@
       micBtn.textContent = 'Voice not supported here';
       return;
     }
-    micBtn.textContent = 'Asking…';
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
-      micStream = stream;
-      micBtn.className = 'jn out';
-      micBtn.textContent = 'Leave the mic';
-      renderMics();
-      meter(stream);
-    }).catch(function (err) {
+    if (framed && micPermitted() === false) { popOut(); return; }
+
+    startMic().catch(function (err) {
+      var name = (err && err.name) || 'Error';
+      if (name === 'NotAllowedError' && framed) { popOut(); return; }
       micBtn.className = 'jn err';
-      micBtn.textContent = err && err.name === 'NotAllowedError'
-        ? 'Microphone blocked'
-        : 'No microphone found';
-      $('vNames').textContent = err && err.name === 'NotAllowedError'
-        ? 'Blocked — either you declined, or this page is embedded without mic permission'
+      micBtn.textContent = name === 'NotAllowedError' ? 'Microphone blocked' : 'No microphone found';
+      $('vNames').textContent = name === 'NotAllowedError'
+        ? 'You declined the microphone — press the button again to allow it'
         : 'No microphone on this device';
     });
   };
+
+  /* Say what the button will actually do, before it's pressed. */
+  if (framed && micPermitted() === false) micBtn.textContent = '🎙 Open a tab to talk';
 
   function renderMics() {
     var mics = $('mics');
@@ -506,12 +660,25 @@
 
   /* ── boot ────────────────────────────────────────────────── */
   drawGrid('');
+
+  /* ?voice=OH — this tab was opened from the embed so someone could talk.
+     Land in that room and turn the microphone on without a second press. */
+  var wantVoice = (location.search.match(/[?&]voice=([A-Z]{2})/) || [])[1];
+
   if (me) {
     $('em').value = me.email || '';
     $('nm').value = me.name;
     $('cty').value = me.city || '';
     sel.value = me.state;
-    openRoom(byAbbr(me.state === room.a ? room.a : me.state));
+    openRoom(wantVoice ? byAbbr(wantVoice) : room);
+    if (wantVoice && !framed) {
+      $('vNames').textContent = 'Opening your microphone…';
+      startMic().catch(function () {
+        micBtn.className = 'jn';
+        micBtn.textContent = '🎙 Join the mic';
+        $('vNames').textContent = 'Press the button when you are ready to talk';
+      });
+    }
   } else {
     paintSwatches();
     show('vJoin');

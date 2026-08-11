@@ -39,7 +39,10 @@ body{
 button,input,select,textarea{font-family:inherit}
 :focus-visible{outline:2px solid var(--red);outline-offset:2px}
 
-#app{height:100%;display:flex;flex-direction:column;min-height:0}
+/* The community's embed reported a 0×0 viewport at script time, so height:100%
+   alone can collapse the whole app to nothing. The floor keeps it usable even
+   when the host frame declares no height of its own. */
+#app{height:100%;min-height:520px;display:flex;flex-direction:column}
 .view{display:none;flex:1;flex-direction:column;min-height:0}
 .view.on{display:flex}
 
@@ -171,6 +174,23 @@ button,input,select,textarea{font-family:inherit}
 .m .tx{font-size:13.5px;color:#C6CDDC;line-height:1.5;overflow-wrap:anywhere;white-space:pre-wrap}
 .sys{font-family:var(--mono);font-size:10.5px;color:var(--faint2);text-align:center;padding:2px 0}
 .sys.pin{color:var(--gold)}
+/* ⋯ menu in the room header */
+.menuwrap{position:relative;display:flex}
+.menu{position:absolute;right:0;top:26px;background:var(--panel);border:1px solid var(--line2);
+  border-radius:8px;padding:5px;display:flex;flex-direction:column;min-width:190px;z-index:20;
+  box-shadow:0 14px 34px -14px rgba(0,0,0,.8)}
+.menu button{background:none;border:0;color:var(--dim);text-align:left;padding:8px 10px;border-radius:5px;
+  font-size:13px;cursor:pointer;white-space:nowrap}
+.menu button:hover{background:var(--panel2);color:var(--text)}
+
+/* emoji tray */
+.emoji{display:flex;flex-wrap:wrap;gap:2px;padding:10px 18px 0;background:var(--deep);
+  border-top:1px solid var(--line);max-height:132px;overflow-y:auto}
+.emoji button{background:none;border:0;font-size:20px;line-height:1;padding:5px;border-radius:6px;cursor:pointer}
+.emoji button:hover{background:var(--panel2)}
+.emj{background:none;border:0;color:var(--faint);font-size:19px;cursor:pointer;padding:0 2px;flex:0 0 auto;line-height:1}
+.emj:hover,.emj[aria-expanded="true"]{color:var(--gold)}
+
 .cmp{border-top:1px solid var(--line);padding:11px 18px;display:flex;gap:9px;align-items:center;background:var(--deep)}
 .cmp input{flex:1;background:var(--panel);border:1px solid var(--line2);color:var(--text);border-radius:20px;
   padding:10px 15px;font-size:13.5px;min-width:0}
@@ -185,6 +205,8 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
 .wp .t .n{font-size:12px;color:#C6CDDC;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
 .wp .t .c{font-family:var(--mono);font-size:9.5px;color:var(--faint2);display:block}
 .wp .mk{margin-left:auto;font-size:9px;color:var(--teal2)}
+.wp.off .av{opacity:.42}
+.wp.off .t .n{color:var(--faint)}
 
 /* announcements */
 .ann{flex:1;display:grid;grid-template-columns:1fr 300px;min-height:0}
