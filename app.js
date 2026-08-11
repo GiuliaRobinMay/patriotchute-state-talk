@@ -326,6 +326,14 @@
 
     $('ci').placeholder = 'Message ' + s.n + '…';
     setTitle();
+
+    if (me) {
+      avatar($('meAv'), me);
+      $('meName').textContent = me.name;
+      var mail = db.email && db.email();
+      $('meMail').textContent = mail || 'Signed in on this device only';
+    }
+
     show('vRoom');
 
     stopMessages(); stopPresence();
