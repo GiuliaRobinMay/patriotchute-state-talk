@@ -65,6 +65,8 @@
       }] : []);
     },
 
+    nameTaken: function () { return Promise.resolve(false); },
+
     onPresence: function () { return function () {}; },
 
     notice: function () {
@@ -141,18 +143,49 @@
 
       signOut: function () { return client.auth.signOut(); },
 
+      /* Two queries rather than a join. messages.author points at auth.users,
+         not at profiles, so the database has no relationship to follow and a
+         nested select fails outright — which is what left new arrivals
+         staring at an empty room. Fetch the messages, then look up the
+         handful of authors we haven't seen before. */
       messages: function (room) {
         return client.from('messages')
-          .select('id, body, created_at, author, profiles(name, city, bg, fg, photo)')
+          .select('id, body, created_at, author')
           .eq('room', room)
           .order('created_at', { ascending: false })
           .limit(200)
           .then(function (r) {
             if (r.error) throw r.error;
-            return r.data.reverse().map(function (row) {
-              if (row.profiles) cache[row.author] = row.profiles;
-              return row2msg(row, row.profiles);
+            var rows = r.data.reverse();
+            var need = [];
+            rows.forEach(function (x) {
+              if (!cache[x.author] && need.indexOf(x.author) === -1) need.push(x.author);
             });
+            if (!need.length) {
+              return rows.map(function (x) { return row2msg(x, cache[x.author]); });
+            }
+            return client.from('profiles')
+              .select('id, name, city, bg, fg, photo')
+              .in('id', need)
+              .then(function (p) {
+                if (!p.error && p.data) {
+                  p.data.forEach(function (pr) { cache[pr.id] = pr; });
+                }
+                return rows.map(function (x) { return row2msg(x, cache[x.author]); });
+              });
+          });
+      },
+
+      /* Two people called "Dana R." in one room helps nobody. */
+      nameTaken: function (state, name) {
+        return client.from('profiles')
+          .select('id', { count: 'exact', head: true })
+          .eq('state', state)
+          .ilike('name', name)
+          .neq('id', uid)
+          .then(function (r) {
+            if (r.error) throw r.error;
+            return (r.count || 0) > 0;
           });
       },
 

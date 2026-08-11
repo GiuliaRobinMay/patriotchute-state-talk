@@ -126,25 +126,63 @@
     r.readAsDataURL(file);
   };
 
-  $('nm').oninput = paintSwatches;
+  /* Name availability. Debounced, because it asks the database on each
+     keystroke otherwise, and it re-runs when the state changes since a name
+     is only taken within one room. */
+  var nmchk = $('nmchk'), nameTimer = null, nameFree = true;
+
+  function suggest(base) {
+    var m = base.match(/^(.*?)(\d+)$/);
+    return m ? m[1] + (Number(m[2]) + 1) : base + ' 2';
+  }
+
+  function checkName() {
+    var v = $('nm').value.trim();
+    nameFree = true;
+    if (!v) { nmchk.className = 'chk wait'; nmchk.textContent = ''; return; }
+    if (!db.shared) { nmchk.className = 'chk ok'; nmchk.textContent = '✓ Looks good'; return; }
+    nmchk.className = 'chk wait';
+    nmchk.textContent = 'checking…';
+    db.nameTaken(sel.value, v).then(function (taken) {
+      if ($('nm').value.trim() !== v) return;          // they kept typing
+      nameFree = !taken;
+      if (taken) {
+        nmchk.className = 'chk no';
+        nmchk.textContent = '✕ Someone in ' + byAbbr(sel.value).n + ' already goes by that — try ' + suggest(v);
+      } else {
+        nmchk.className = 'chk ok';
+        nmchk.textContent = '✓ ' + v + ' is free in ' + byAbbr(sel.value).n;
+      }
+    }).catch(function () {
+      nmchk.className = 'chk wait';
+      nmchk.textContent = '';
+    });
+  }
+
+  $('nm').oninput = function () {
+    paintSwatches();
+    clearTimeout(nameTimer);
+    nameTimer = setTimeout(checkName, 450);
+  };
 
   function cityHint() {
     var towns = (window.CITIES || {})[sel.value];
     $('cty').placeholder = towns ? towns[0] : 'Your nearest city';
   }
-  sel.onchange = cityHint;
+  sel.onchange = function () { cityHint(); checkName(); };
 
+  /* Say nothing while a half-typed address is on screen — the old version
+     sat on "checking…" forever, which read as broken. */
   var emchk = $('emchk');
   $('em').oninput = function () {
     var v = $('em').value.trim();
-    if (!v) { emchk.className = 'chk wait'; emchk.textContent = ''; return; }
-    if (/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(v)) {
-      emchk.className = 'chk ok';
-      emchk.textContent = '✓ Looks good';
-    } else {
+    if (!v || !/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(v)) {
       emchk.className = 'chk wait';
-      emchk.textContent = 'checking…';
+      emchk.textContent = '';
+      return;
     }
+    emchk.className = 'chk ok';
+    emchk.textContent = '✓ Saved with your profile';
   };
 
   $('joinBtn').onclick = function () {
@@ -153,6 +191,11 @@
       $('nm').focus();
       emchk.className = 'chk no';
       emchk.textContent = '✕ We need a name to show in the room';
+      return;
+    }
+    if (!nameFree) {
+      $('nm').focus();
+      checkName();
       return;
     }
     var btn = this;
@@ -240,7 +283,13 @@
       stopPresence = db.onPresence(s.a, me, function (ids) {
         onlineIds = {};
         ids.forEach(function (id) { onlineIds[id] = true; });
-        markOnline();
+        /* Somebody online who wasn't in the list means a new member joined
+           after this page loaded. Without this the roster stayed frozen at
+           whoever existed when you opened the room. */
+        var known = {};
+        members.forEach(function (p) { known[p.id] = true; });
+        var stranger = ids.some(function (id) { return !known[id]; });
+        if (stranger) loadMembers(); else markOnline();
       });
     }
   }
