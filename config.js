@@ -13,6 +13,6 @@
  * the visitor's own device and nobody sees anyone else.
  */
 window.CONFIG = {
-  SUPABASE_URL: '',
+  SUPABASE_URL: 'https://ukgygzvyzygummbeobmk.supabase.co',
   SUPABASE_ANON_KEY: ''
 };
