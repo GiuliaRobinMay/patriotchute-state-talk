@@ -1,42 +1,19 @@
-/* State Rooms — preview build.
+/* State Rooms.
  *
- * Everything here runs in the browser with no server. Profiles, messages and
- * announcements live in this device's local storage, which is deliberate: it
- * lets us put the real app inside a real embed and find out what the browser
- * allows before committing to a backend.
- *
- * Storage is wrapped because an embedded page is exactly where localStorage
- * throws — Safari partitions it, and some privacy modes disable it outright.
- * If it fails we fall back to memory so the app still runs for the session.
+ * The app talks to window.DB and never cares which kind it got. With the
+ * database configured that's a shared store and two people see the same
+ * room; without it, everything stays on this device and the banner at the
+ * top says so.
  */
 (function () {
   'use strict';
 
-  var S = window.STATES, LIVE = window.LIVE_SEED, COLORS = window.AV_COLORS;
-  var KEY = 'stateRooms.v1.';
+  var S = window.STATES, COLORS = window.AV_COLORS;
+  var db = window.DB;
 
-  /* ── storage ─────────────────────────────────────────────── */
-  var memory = {}, storageWorks = true;
-  try {
-    window.localStorage.setItem(KEY + 'probe', '1');
-    window.localStorage.removeItem(KEY + 'probe');
-  } catch (e) { storageWorks = false; }
-
-  function put(k, v) {
-    var s = JSON.stringify(v);
-    memory[k] = s;
-    if (storageWorks) { try { localStorage.setItem(KEY + k, s); } catch (e) { storageWorks = false; } }
-  }
-  function get(k, fallback) {
-    var raw = null;
-    if (storageWorks) { try { raw = localStorage.getItem(KEY + k); } catch (e) { storageWorks = false; } }
-    if (raw === null) raw = memory[k] || null;
-    if (raw === null) return fallback;
-    try { return JSON.parse(raw); } catch (e) { return fallback; }
-  }
-
-  /* ── small helpers ───────────────────────────────────────── */
+  /* ── helpers ─────────────────────────────────────────────────── */
   var $ = function (id) { return document.getElementById(id); };
+
   function initials(name) {
     var p = String(name || '').trim().split(/\s+/);
     return (((p[0] || '')[0] || '') + ((p[1] || '')[0] || '')).toUpperCase() || '?';
@@ -45,39 +22,58 @@
     var d = new Date(ts), h = d.getHours(), m = String(d.getMinutes()).padStart(2, '0');
     return (h % 12 || 12) + ':' + m + ' ' + (h < 12 ? 'AM' : 'PM');
   }
-  function byAbbr(a) { for (var i = 0; i < S.length; i++) if (S[i].a === a) return S[i]; return S[34]; }
+  function byAbbr(a) {
+    for (var i = 0; i < S.length; i++) if (S[i].a === a) return S[i];
+    return S[34];
+  }
+  function colorFor(name) { return COLORS[String(name).length % COLORS.length]; }
+
   function avatar(el, person) {
     el.textContent = '';
+    el.style.background = '';
     if (person.photo) {
       var img = new Image();
       img.src = person.photo; img.alt = '';
       el.appendChild(img);
       el.style.background = 'transparent';
-    } else {
-      el.style.background = person.bg || '#7186AB';
-      el.style.color = person.fg || '#0D1729';
-      el.textContent = initials(person.name);
+      return;
     }
+    var c = colorFor(person.name);
+    el.style.background = person.bg || c.bg;
+    el.style.color = person.fg || c.fg;
+    el.textContent = initials(person.name);
   }
 
-  /* ── state ───────────────────────────────────────────────── */
-  var me = get('profile', null);
-  var room = byAbbr(get('lastRoom', 'OH'));
-  var view = 'vJoin';
+  /* ── state ───────────────────────────────────────────────────── */
+  var me = null;
+  var room = byAbbr('OH');
+  var onlineIds = {};
+  var members = [];
+  var stopMessages = function () {};
+  var stopPresence = function () {};
 
   function show(v) {
-    view = v;
-    ['vJoin', 'vRooms', 'vRoom', 'vAnn'].forEach(function (id) {
+    ['vJoin', 'vRoom', 'vAnn'].forEach(function (id) {
       $(id).classList.toggle('on', id === v);
     });
-    if (v === 'vRoom') { $('ci').focus({ preventScroll: true }); }
+    if (v === 'vRoom') { try { $('ci').focus({ preventScroll: true }); } catch (e) {} }
   }
 
-  /* ── preview banner ──────────────────────────────────────── */
-  if (get('hidePreviewBar', false)) $('pbar').hidden = true;
-  $('pbarX').onclick = function () { $('pbar').hidden = true; put('hidePreviewBar', true); };
+  /* ── the banner ──────────────────────────────────────────────── */
+  function updateBanner() {
+    var bar = $('pbar'), text = bar.firstElementChild;
+    if (!db.storageWorks()) {
+      bar.hidden = false;
+      text.innerHTML = '<b>Heads up.</b> This browser is blocking storage inside the embed — you may be asked to set up again next visit.';
+      return;
+    }
+    if (db.shared) { bar.hidden = true; return; }
+    if (db.pref('hidePreviewBar', false)) { bar.hidden = true; return; }
+    bar.hidden = false;
+  }
+  $('pbarX').onclick = function () { $('pbar').hidden = true; db.setPref('hidePreviewBar', true); };
 
-  /* ── join ────────────────────────────────────────────────── */
+  /* ── join ────────────────────────────────────────────────────── */
   var sel = $('stt');
   S.forEach(function (s) {
     var o = document.createElement('option');
@@ -89,7 +85,7 @@
   var chosenColor = COLORS[0], uploaded = null;
 
   function paintSwatches() {
-    var ini = initials($('nm').value) ;
+    var ini = initials($('nm').value);
     swatches.forEach(function (sw) {
       if (uploaded && sw.getAttribute('aria-pressed') === 'true') return;
       sw.textContent = ini;
@@ -116,7 +112,7 @@
   $('upFile').onchange = function (e) {
     var file = e.target.files && e.target.files[0];
     if (!file) return;
-    if (file.size > 3 * 1024 * 1024) { alert('That image is over 3 MB — please pick a smaller one.'); return; }
+    if (file.size > 1.5 * 1024 * 1024) { alert('That image is over 1.5 MB — please pick a smaller one.'); return; }
     var r = new FileReader();
     r.onload = function () {
       uploaded = r.result;
@@ -132,24 +128,19 @@
 
   $('nm').oninput = paintSwatches;
 
-  /* Suggest a city from the state they just picked, so the field reads as an
-     example rather than a demand. */
   function cityHint() {
     var towns = (window.CITIES || {})[sel.value];
     $('cty').placeholder = towns ? towns[0] : 'Your nearest city';
   }
   sel.onchange = cityHint;
-  cityHint();
 
-  /* The member check is a placeholder until Zapier feeds a real list.
-     The shape of the interaction is final — only the lookup changes. */
   var emchk = $('emchk');
   $('em').oninput = function () {
     var v = $('em').value.trim();
     if (!v) { emchk.className = 'chk wait'; emchk.textContent = ''; return; }
     if (/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(v)) {
       emchk.className = 'chk ok';
-      emchk.textContent = '✓ Looks good — member checking comes online with the database';
+      emchk.textContent = '✓ Looks good';
     } else {
       emchk.className = 'chk wait';
       emchk.textContent = 'checking…';
@@ -158,9 +149,15 @@
 
   $('joinBtn').onclick = function () {
     var name = $('nm').value.trim();
-    if (!name) { $('nm').focus(); emchk.className = 'chk no'; emchk.textContent = '✕ We need a name to show in the room'; return; }
-    me = {
-      id: 'me',
+    if (!name) {
+      $('nm').focus();
+      emchk.className = 'chk no';
+      emchk.textContent = '✕ We need a name to show in the room';
+      return;
+    }
+    var btn = this;
+    btn.disabled = true;
+    var profile = {
       email: $('em').value.trim(),
       name: name,
       city: $('cty').value.trim(),
@@ -169,138 +166,87 @@
       bg: chosenColor.bg,
       fg: chosenColor.fg
     };
-    put('profile', me);
-    room = byAbbr(me.state);
-    put('lastRoom', room.a);
-    drawGrid(''); drawRail(); openRoom(room);
+    db.saveProfile(profile).then(function (saved) {
+      me = saved;
+      btn.disabled = false;
+      openRoom(byAbbr(me.state));
+    }).catch(function (err) {
+      btn.disabled = false;
+      emchk.className = 'chk no';
+      emchk.textContent = '✕ Could not save that — ' + ((err && err.message) || 'try again');
+    });
   };
 
-  /* ── rooms grid ──────────────────────────────────────────── */
-  function headcount(s) { return s.seed; }
-
-  function drawGrid(q) {
-    var grid = $('grid');
-    q = (q || '').trim().toLowerCase();
-    grid.textContent = '';
-    var list = myStates().filter(function (s) {
-      return !q || s.n.toLowerCase().indexOf(q) === 0 || s.a.toLowerCase() === q;
-    });
-    if (!list.length) {
-      var p = document.createElement('p');
-      p.className = 'hint'; p.textContent = 'No state matches that.';
-      grid.appendChild(p); return;
-    }
-    list.forEach(function (s) {
-      var b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'st' + (LIVE.indexOf(s.a) > -1 ? ' lv' : '') + (me && me.state === s.a ? ' mine' : '');
-      var ab = document.createElement('span'); ab.className = 'ab'; ab.textContent = s.a;
-      var nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = s.n;
-      var ct = document.createElement('span'); ct.className = 'ct'; ct.textContent = headcount(s);
-      b.appendChild(ab); b.appendChild(nm); b.appendChild(ct);
-      b.onclick = function () { openRoom(s); };
-      grid.appendChild(b);
-    });
-  }
-  $('q').oninput = function (e) { drawGrid(e.target.value); };
-  $('meBtn').onclick = function () {
-    if (!me) return;
-    if (confirm('Sign out and set up again on this device?')) {
-      put('profile', null); me = null; show('vJoin');
-    }
-  };
-
-  /* ── the rail ────────────────────────────────────────────── */
-  /* Members belong to one state. The rail lists only their own room, plus a
-     way out if they move house — browsing all 51 was making the app feel like
-     a directory rather than somewhere you live. Hosts still see everything. */
-  function myStates() {
-    if (!me) return S;
-    if (me.host) return S;
-    return S.filter(function (s) { return s.a === me.state; });
-  }
-
+  /* ── the room ────────────────────────────────────────────────── */
   function drawRail() {
     var rail = $('rail');
     rail.textContent = '';
-    var mine = myStates();
-    var l = document.createElement('div'); l.className = 'rl';
-    l.textContent = me && !me.host ? 'Your state' : 'All states';
+    var l = document.createElement('div'); l.className = 'rl'; l.textContent = 'All states';
     rail.appendChild(l);
-    mine.forEach(function (s) {
+    S.forEach(function (s) {
       var b = document.createElement('button');
       b.type = 'button';
-      b.className = 'ri' + (s.a === room.a ? ' cur' : '') + (LIVE.indexOf(s.a) > -1 ? ' on' : '');
+      b.className = 'ri' + (s.a === room.a ? ' cur' : '');
       var d = document.createElement('span'); d.className = 'd';
       var n = document.createElement('span'); n.className = 'n'; n.textContent = s.n;
-      var c = document.createElement('span'); c.className = 'c'; c.textContent = headcount(s);
-      b.appendChild(d); b.appendChild(n); b.appendChild(c);
+      b.appendChild(d); b.appendChild(n);
       b.onclick = function () { openRoom(s); };
       rail.appendChild(b);
     });
-    if (me && !me.host) {
-      var move = document.createElement('button');
-      move.type = 'button'; move.className = 'ri';
-      move.style.marginTop = '10px'; move.style.color = 'var(--faint)';
-      move.textContent = 'I’ve moved state';
-      move.onclick = changeState;
-      rail.appendChild(move);
-    }
   }
 
   function changeState() {
     var name = prompt('Which state are you in now?', byAbbr(me.state).n);
     if (!name) return;
-    var q = name.trim().toLowerCase();
-    var found = null;
-    S.forEach(function (s) {
-      if (s.n.toLowerCase() === q || s.a.toLowerCase() === q) found = s;
-    });
+    var q = name.trim().toLowerCase(), found = null;
+    S.forEach(function (s) { if (s.n.toLowerCase() === q || s.a.toLowerCase() === q) found = s; });
     if (!found) { alert('I don’t recognise “' + name + '”. Try the full state name.'); return; }
     me.state = found.a;
-    put('profile', me);
-    openRoom(found);
+    db.saveProfile(me).then(function () { openRoom(found); });
   }
 
-  /* ── a room ──────────────────────────────────────────────── */
+  function setTitle() {
+    var online = members.filter(function (p) { return p.online; }).length || (me ? 1 : 0);
+    $('tNm').textContent = room.n;
+    $('tAb').textContent = room.a;
+    $('tCt').textContent = members.length
+      ? members.length.toLocaleString('en-US') + (members.length === 1 ? ' member · ' : ' members · ') + online + ' online now'
+      : 'you are the first one here';
+  }
+
   function openRoom(s) {
     room = s;
-    put('lastRoom', s.a);
+    db.setPref('lastRoom', s.a);
 
-    /* One state, one room: no sidebar to browse and nowhere to go back to. */
-    var solo = !!(me && !me.host);
-    document.querySelector('.room').classList.toggle('solo', solo);
-    $('backBtn').hidden = solo;
+    document.querySelector('.room').classList.toggle('solo', !(me && me.host));
+    if (me && me.host) drawRail();
 
-    var online = (window.SAMPLE_PEOPLE || []).filter(function (p) { return p.online; }).length + (me ? 1 : 0);
-    $('tNm').textContent = s.n;
-    $('tAb').textContent = s.a;
-    $('tCt').textContent = headcount(s).toLocaleString('en-US') + ' members · ' + online + ' online now';
     $('ci').placeholder = 'Message ' + s.n + '…';
-
-    if (!solo) drawRail();
-    drawNotice(); drawChat(); drawWho();
+    setTitle();
     show('vRoom');
-  }
-  $('backBtn').onclick = function () { drawGrid($('q').value); show('vRooms'); };
 
-  function msgKey() { return 'msgs.' + room.a; }
+    stopMessages(); stopPresence();
+    onlineIds = {};
 
-  function drawChat() {
-    var chat = $('chat');
-    chat.textContent = '';
-    var msgs = get(msgKey(), []);
-    if (!msgs.length) {
-      var e = document.createElement('div');
-      e.className = 'sys';
-      e.textContent = 'Nothing here yet. Say hello to ' + room.n + '.';
-      chat.appendChild(e);
+    loadChat();
+    loadMembers();
+    loadNotice();
+
+    stopMessages = db.onMessages(s.a, function (msg) {
+      appendMessage(msg);
+      $('chat').scrollTop = $('chat').scrollHeight;
+    });
+    if (me) {
+      stopPresence = db.onPresence(s.a, me, function (ids) {
+        onlineIds = {};
+        ids.forEach(function (id) { onlineIds[id] = true; });
+        markOnline();
+      });
     }
-    msgs.forEach(function (m) { chat.appendChild(msgEl(m)); });
-    chat.scrollTop = chat.scrollHeight;
   }
 
-  function msgEl(m) {
+  /* ── chat ────────────────────────────────────────────────────── */
+  function messageEl(m) {
     var wrap = document.createElement('div'); wrap.className = 'm';
     var av = document.createElement('span'); av.className = 'av sm';
     avatar(av, m);
@@ -317,43 +263,73 @@
     return wrap;
   }
 
+  function appendMessage(m) {
+    var chat = $('chat');
+    var empty = chat.querySelector('.sys.empty');
+    if (empty) empty.remove();
+    chat.appendChild(messageEl(m));
+  }
+
+  function loadChat() {
+    var chat = $('chat');
+    chat.textContent = '';
+    db.messages(room.a).then(function (msgs) {
+      chat.textContent = '';
+      if (!msgs.length) {
+        var e = document.createElement('div');
+        e.className = 'sys empty';
+        e.textContent = 'Nothing here yet. Say hello to ' + room.n + '.';
+        chat.appendChild(e);
+        return;
+      }
+      msgs.forEach(function (m) { chat.appendChild(messageEl(m)); });
+      chat.scrollTop = chat.scrollHeight;
+    }).catch(function (err) {
+      chat.textContent = '';
+      var e = document.createElement('div');
+      e.className = 'sys';
+      e.textContent = 'Could not load the conversation — ' + ((err && err.message) || 'try refreshing');
+      chat.appendChild(e);
+    });
+  }
+
   $('cmp').onsubmit = function (e) {
     e.preventDefault();
     var i = $('ci'), text = i.value.trim();
     if (!text || !me) return;
-    var msgs = get(msgKey(), []);
-    var m = { name: me.name, city: me.city, photo: me.photo, bg: me.bg, fg: me.fg, text: text, ts: Date.now() };
-    msgs.push(m);
-    if (msgs.length > 300) msgs = msgs.slice(-300);
-    put(msgKey(), msgs);
-    var chat = $('chat');
-    if (msgs.length === 1) chat.textContent = '';
-    chat.appendChild(msgEl(m));
-    chat.scrollTop = chat.scrollHeight;
     i.value = '';
+    var msg = {
+      name: me.name, city: me.city, photo: me.photo,
+      bg: me.bg, fg: me.fg, text: text, ts: Date.now()
+    };
+    appendMessage(msg);                          // show it immediately
+    $('chat').scrollTop = $('chat').scrollHeight;
+    db.send(room.a, msg).catch(function (err) {
+      var e2 = document.createElement('div');
+      e2.className = 'sys';
+      e2.textContent = 'That message did not send — ' + ((err && err.message) || 'check your connection');
+      $('chat').appendChild(e2);
+    });
   };
 
-  /* Roster: online first with a green dot, then everyone else in the state.
-     Big states run to hundreds of members, so the offline list is capped —
-     a scroll of 390 grey names tells you nothing you wanted to know. */
-  var OFFLINE_SHOWN = 25;
+  /* ── who's here ──────────────────────────────────────────────── */
+  var OFFLINE_SHOWN = 40;
 
-  function personRow(p, isYou) {
+  function personRow(p) {
     var row = document.createElement('div');
-    row.className = 'wp' + (p.online || isYou ? '' : ' off');
+    row.className = 'wp' + (p.online ? '' : ' off');
+    if (p.id) row.dataset.id = p.id;
     var av = document.createElement('span'); av.className = 'av xs';
-    avatar(av, {
-      name: p.name, photo: p.photo,
-      bg: p.bg || COLORS[p.name.length % COLORS.length].bg,
-      fg: p.fg || COLORS[p.name.length % COLORS.length].fg
-    });
+    avatar(av, p);
     var t = document.createElement('span'); t.className = 't';
     var n = document.createElement('span'); n.className = 'n';
-    n.textContent = p.name + (isYou ? ' (you)' : '');
+    n.textContent = p.name + (p.you ? ' (you)' : '');
     t.appendChild(n);
     if (p.city) { var c = document.createElement('span'); c.className = 'c'; c.textContent = p.city; t.appendChild(c); }
     row.appendChild(av); row.appendChild(t);
-    if (p.online || isYou) { var d = document.createElement('span'); d.className = 'mk'; d.textContent = '●'; row.appendChild(d); }
+    var d = document.createElement('span'); d.className = 'mk'; d.textContent = '●';
+    if (!p.online) d.style.visibility = 'hidden';
+    row.appendChild(d);
     return row;
   }
 
@@ -365,43 +341,151 @@
   function drawWho() {
     var w = $('whoList');
     w.textContent = '';
+    var online = members.filter(function (p) { return p.online; });
+    var offline = members.filter(function (p) { return !p.online; });
 
-    var towns = (window.CITIES || {})[room.a] || [];
-    var sample = (window.SAMPLE_PEOPLE || []).map(function (p, i) {
-      return { name: p.name, online: p.online, city: towns[i % towns.length] || '' };
-    });
-    var online = sample.filter(function (p) { return p.online; });
-    var offline = sample.filter(function (p) { return !p.online; });
-    var total = headcount(room);
-
-    w.appendChild(label('Online · ' + (online.length + (me ? 1 : 0))));
-    if (me) w.appendChild(personRow(me, true));
+    w.appendChild(label('Online · ' + online.length));
     online.forEach(function (p) { w.appendChild(personRow(p)); });
 
-    w.appendChild(label('Also in ' + room.n + ' · ' + total));
-    offline.slice(0, OFFLINE_SHOWN).forEach(function (p) { w.appendChild(personRow(p)); });
-
-    var rest = total - offline.slice(0, OFFLINE_SHOWN).length - online.length - (me ? 1 : 0);
-    if (rest > 0) {
-      var more = document.createElement('p');
-      more.className = 'hint'; more.style.padding = '9px 6px 0';
-      more.textContent = '+ ' + rest.toLocaleString('en-US') + ' more';
-      w.appendChild(more);
+    if (offline.length) {
+      w.appendChild(label('Also in ' + room.n + ' · ' + offline.length));
+      offline.slice(0, OFFLINE_SHOWN).forEach(function (p) { w.appendChild(personRow(p)); });
+      if (offline.length > OFFLINE_SHOWN) {
+        var more = document.createElement('p');
+        more.className = 'hint'; more.style.padding = '9px 6px 0';
+        more.textContent = '+ ' + (offline.length - OFFLINE_SHOWN).toLocaleString('en-US') + ' more';
+        w.appendChild(more);
+      }
     }
 
-    var note = document.createElement('p');
-    note.className = 'hint';
-    note.style.cssText = 'padding:12px 6px 0;border-top:1px solid var(--line);margin-top:10px';
-    note.textContent = 'Example members — real ones appear once the database is connected.';
-    w.appendChild(note);
+    if (!db.shared) {
+      var note = document.createElement('p');
+      note.className = 'hint';
+      note.style.cssText = 'padding:12px 6px 0;border-top:1px solid var(--line);margin-top:10px';
+      note.textContent = 'Other members appear once the database is connected.';
+      w.appendChild(note);
+    }
   }
 
-  /* ── emoji ───────────────────────────────────────────────
-     Deliberately a small fixed set rather than a full picker: the whole
-     Unicode catalogue is a search box nobody wants in a chat this simple. */
+  function markOnline() {
+    members.forEach(function (p) {
+      p.online = p.you || !!onlineIds[p.id];
+    });
+    drawWho();
+    setTitle();
+  }
+
+  function loadMembers() {
+    db.members(room.a, me).then(function (list) {
+      members = list;
+      markOnline();
+    }).catch(function () { members = []; drawWho(); });
+  }
+
+  /* ── announcements ───────────────────────────────────────────── */
+  function loadNotice() {
+    var box = $('notice');
+    db.notice(room.a).then(function (n) {
+      if (!n || db.dismissed(n.id)) { box.hidden = true; return; }
+      box.hidden = false;
+      $('nFrom').textContent = '';
+      var s1 = document.createElement('span');
+      s1.textContent = '📌 Pinned by ';
+      var b = document.createElement('b'); b.textContent = n.by;
+      s1.appendChild(b);
+      $('nFrom').appendChild(s1);
+      if (n.until) {
+        var s2 = document.createElement('span');
+        s2.textContent = '· clears ' + new Date(n.until).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        $('nFrom').appendChild(s2);
+      }
+      $('nTitle').textContent = n.title;
+      $('nBody').textContent = n.body || '';
+      $('nX').onclick = function () { db.dismiss(n.id); box.hidden = true; };
+    }).catch(function () { box.hidden = true; });
+  }
+
+  function radio(box, after) {
+    var opts = [].slice.call(box.querySelectorAll('.opt'));
+    opts.forEach(function (o) {
+      o.onclick = function () {
+        opts.forEach(function (x) { x.setAttribute('aria-pressed', String(x === o)); });
+        if (after) after(o);
+      };
+    });
+  }
+
+  var picking = false, chosenRooms = {}, lastCount = S.length;
+  radio($('expiry'));
+  radio($('aud'), function (o) {
+    picking = o.dataset.all === '0';
+    $('chips').hidden = !picking;
+    tally();
+  });
+
+  S.forEach(function (s) {
+    var c = document.createElement('button');
+    c.type = 'button'; c.className = 'chip';
+    c.setAttribute('aria-pressed', 'false');
+    c.textContent = s.a; c.title = s.n;
+    c.onclick = function () {
+      var on = c.getAttribute('aria-pressed') === 'true';
+      c.setAttribute('aria-pressed', String(!on));
+      if (on) delete chosenRooms[s.a]; else chosenRooms[s.a] = true;
+      tally();
+    };
+    $('chips').appendChild(c);
+  });
+
+  function tally() {
+    var rooms = picking ? Object.keys(chosenRooms).length : S.length;
+    lastCount = rooms;
+    var n = $('postN');
+    if (n) n.textContent = rooms;
+    $('reachN').textContent = rooms ? (rooms === S.length ? 'Everyone' : rooms + ' of 51') : '—';
+    $('postBtn').disabled = rooms === 0;
+  }
+
+  $('aTitle').oninput = function () { $('pvT').textContent = this.value || 'Your headline'; };
+  $('aBody').oninput = function () { $('pvB').textContent = this.value || 'Your note.'; };
+
+  $('postBtn').onclick = function () {
+    var title = $('aTitle').value.trim();
+    if (!title) { $('aTitle').focus(); return; }
+    var days = Number(document.querySelector('#expiry .opt[aria-pressed="true"]').dataset.days);
+    var b = this, count = lastCount;
+    b.disabled = true;
+    db.setNotice({
+      id: String(Date.now()),
+      by: (me && me.name) || 'a host',
+      title: title,
+      body: $('aBody').value.trim(),
+      all: !picking,
+      rooms: Object.keys(chosenRooms),
+      until: days ? Date.now() + days * 86400000 : 0
+    }).then(function () {
+      b.textContent = '✓ Pinned to ' + count + ' rooms';
+      setTimeout(function () {
+        b.disabled = false;
+        b.textContent = '';
+        b.appendChild(document.createTextNode('Pin to '));
+        var sp = document.createElement('span'); sp.id = 'postN'; sp.textContent = count;
+        b.appendChild(sp);
+        b.appendChild(document.createTextNode(' rooms'));
+      }, 2000);
+    }).catch(function (err) {
+      b.disabled = false;
+      alert('Could not pin that: ' + ((err && err.message) || 'unknown error'));
+    });
+  };
+  $('clearBtn').onclick = function () {
+    db.clearNotice().then(function () { alert('Notice taken down.'); });
+  };
+  $('annBack').onclick = function () { loadNotice(); show('vRoom'); };
+
+  /* ── emoji ───────────────────────────────────────────────────── */
   var EMOJI = ('😀 😂 🙂 😉 😍 🤔 😅 😮 😢 🙃 😎 🥳 👋 👍 👎 🙌 👏 🤝 💪 🙏 ❤️ 🔥 ⭐ ✅ ❌ ☕ 🎉 🎂 🚗 🏡 ☀️ 🌧️ ❄️ 🇺🇸 📌 ⏰').split(' ');
   var tray = $('emoji'), emjBtn = $('emjBtn');
-
   EMOJI.forEach(function (ch) {
     var b = document.createElement('button');
     b.type = 'button'; b.textContent = ch; b.setAttribute('aria-label', ch);
@@ -412,14 +496,12 @@
     };
     tray.appendChild(b);
   });
+  emjBtn.onclick = function () {
+    tray.hidden = !tray.hidden;
+    emjBtn.setAttribute('aria-expanded', String(!tray.hidden));
+  };
 
-  function toggleTray(open) {
-    tray.hidden = !open;
-    emjBtn.setAttribute('aria-expanded', String(open));
-  }
-  emjBtn.onclick = function () { toggleTray(tray.hidden); };
-
-  /* ── the ⋯ menu ──────────────────────────────────────────── */
+  /* ── the ⋯ menu ──────────────────────────────────────────────── */
   var meMenu = $('meMenu'), meBtn2 = $('meBtn2');
   function toggleMenu(open) {
     meMenu.hidden = !open;
@@ -432,21 +514,14 @@
   $('mOut').onclick = function () {
     toggleMenu(false);
     if (!confirm('Sign out and set up again on this device?')) return;
-    put('profile', null); me = null; show('vJoin');
+    db.signOut().then(function () { me = null; location.reload(); });
   };
 
-  /* ── the microphone ──────────────────────────────────────
-     Measured on the real community (11 Aug 2026): Mighty Networks does not
-     pass microphone permission into the frame, so getUserMedia in the embed
-     fails with NotAllowedError no matter what the member does.
-
-     So when we are embedded and the policy says no, we don't ask and fail —
-     we open the room in its own tab, where the microphone works normally and
-     the member is already signed in. One extra tap instead of a dead end. If
-     a host ever does grant the permission, the check below sees it and voice
-     happens inline as it should. */
+  /* ── the microphone ──────────────────────────────────────────
+     Measured on the live community: Mighty Networks withholds microphone
+     permission from the frame, so asking there can only fail. When that's
+     the case we open the room in its own tab instead of hitting a wall. */
   var micStream = null, micBtn = $('micBtn');
-
   var framed = true;
   try { framed = window.self !== window.top; } catch (e) { framed = true; }
 
@@ -456,13 +531,12 @@
         return document.featurePolicy.allowsFeature('microphone');
       }
     } catch (e) {}
-    return null;              // browser won't say — worth trying
+    return null;
   }
 
   function popOut() {
-    /* No 'noopener' feature here: it forces window.open to return null, which
-       would make every successful pop-out look like a blocked one. Sever the
-       link afterwards instead — same origin, so this is allowed. */
+    /* No 'noopener': it forces window.open to return null, which would make
+       every successful pop-out look like a blocked one. */
     var w = window.open(location.origin + location.pathname + '?voice=' + room.a, '_blank');
     try { if (w) w.opener = null; } catch (e) {}
     if (!w) {
@@ -474,6 +548,41 @@
     micBtn.className = 'jn out';
     micBtn.textContent = '🎙 Talking in the other tab';
     $('vNames').textContent = 'Voice opened in its own tab — chat carries on here';
+  }
+
+  function renderMics() {
+    var mics = $('mics');
+    mics.textContent = '';
+    if (!micStream || !me) { $('vNames').textContent = 'Nobody yet — be the first'; return; }
+    var w = document.createElement('span'); w.className = 'w'; w.id = 'myMic';
+    var ring = document.createElement('span'); ring.className = 'ring';
+    var av = document.createElement('span'); av.className = 'av sm'; avatar(av, me);
+    w.appendChild(ring); w.appendChild(av);
+    mics.appendChild(w);
+    $('vNames').textContent = '';
+    var b = document.createElement('b'); b.textContent = me.name;
+    $('vNames').appendChild(b);
+    $('vNames').appendChild(document.createTextNode(' — your mic is live'));
+  }
+
+  function meter(stream) {
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    var ctx = new Ctx();
+    var src = ctx.createMediaStreamSource(stream);
+    var an = ctx.createAnalyser();
+    an.fftSize = 512;
+    src.connect(an);
+    var data = new Uint8Array(an.frequencyBinCount);
+    (function tick() {
+      if (!micStream) { try { ctx.close(); } catch (e) {} return; }
+      an.getByteFrequencyData(data);
+      var sum = 0;
+      for (var i = 0; i < data.length; i++) sum += data[i];
+      var el = $('myMic');
+      if (el) el.classList.toggle('talk', (sum / data.length) > 8);
+      requestAnimationFrame(tick);
+    })();
   }
 
   function startMic() {
@@ -502,7 +611,6 @@
       return;
     }
     if (framed && micPermitted() === false) { popOut(); return; }
-
     startMic().catch(function (err) {
       var name = (err && err.name) || 'Error';
       if (name === 'NotAllowedError' && framed) { popOut(); return; }
@@ -513,203 +621,51 @@
         : 'No microphone on this device';
     });
   };
-
-  /* Say what the button will actually do, before it's pressed. */
   if (framed && micPermitted() === false) micBtn.textContent = '🎙 Open a tab to talk';
 
-  function renderMics() {
-    var mics = $('mics');
-    mics.textContent = '';
-    if (!micStream || !me) {
-      $('vNames').textContent = 'Nobody yet — be the first';
-      return;
-    }
-    var w = document.createElement('span'); w.className = 'w'; w.id = 'myMic';
-    var ring = document.createElement('span'); ring.className = 'ring';
-    var av = document.createElement('span'); av.className = 'av sm'; avatar(av, me);
-    w.appendChild(ring); w.appendChild(av);
-    mics.appendChild(w);
-    $('vNames').innerHTML = '';
-    var b = document.createElement('b'); b.textContent = me.name;
-    $('vNames').appendChild(b);
-    $('vNames').appendChild(document.createTextNode(' — your mic is live'));
-  }
-
-  /* Lights the ring when you actually make noise, so it is obvious the
-     microphone is working rather than merely permitted. */
-  function meter(stream) {
-    var Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return;
-    var ctx = new Ctx();
-    var src = ctx.createMediaStreamSource(stream);
-    var an = ctx.createAnalyser();
-    an.fftSize = 512;
-    src.connect(an);
-    var data = new Uint8Array(an.frequencyBinCount);
-    (function tick() {
-      if (!micStream) { try { ctx.close(); } catch (e) {} return; }
-      an.getByteFrequencyData(data);
-      var sum = 0;
-      for (var i = 0; i < data.length; i++) sum += data[i];
-      var el = $('myMic');
-      if (el) el.classList.toggle('talk', (sum / data.length) > 8);
-      requestAnimationFrame(tick);
-    })();
-  }
-
-  /* ── announcements ───────────────────────────────────────── */
-  function currentNotice() {
-    var n = get('notice', null);
-    if (!n) return null;
-    if (n.until && Date.now() > n.until) { put('notice', null); return null; }
-    if (!n.all && n.rooms.indexOf(room.a) === -1) return null;
-    if (get('dismissed.' + n.id, false)) return null;
-    return n;
-  }
-  function drawNotice() {
-    var n = currentNotice();
-    var box = $('notice');
-    if (!n) { box.hidden = true; return; }
-    box.hidden = false;
-    $('nFrom').textContent = '';
-    var s1 = document.createElement('span');
-    s1.textContent = '📌 Pinned by ';
-    var b = document.createElement('b'); b.textContent = n.by;
-    s1.appendChild(b);
-    $('nFrom').appendChild(s1);
-    if (n.until) {
-      var s2 = document.createElement('span');
-      s2.textContent = '· clears ' + new Date(n.until).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      $('nFrom').appendChild(s2);
-    }
-    $('nTitle').textContent = n.title;
-    $('nBody').textContent = n.body;
-    $('nX').onclick = function () { put('dismissed.' + n.id, true); box.hidden = true; };
-  }
-
-  function radio(box, after) {
-    var opts = [].slice.call(box.querySelectorAll('.opt'));
-    opts.forEach(function (o) {
-      o.onclick = function () {
-        opts.forEach(function (x) { x.setAttribute('aria-pressed', String(x === o)); });
-        if (after) after(o);
-      };
-    });
-  }
-
-  var picking = false, chosenRooms = {};
-  radio($('expiry'));
-  radio($('aud'), function (o) {
-    picking = o.dataset.all === '0';
-    $('chips').hidden = !picking;
-    tally();
-  });
-
-  S.forEach(function (s) {
-    var c = document.createElement('button');
-    c.type = 'button'; c.className = 'chip';
-    c.setAttribute('aria-pressed', 'false');
-    c.textContent = s.a;
-    c.title = s.n;
-    c.onclick = function () {
-      var on = c.getAttribute('aria-pressed') === 'true';
-      c.setAttribute('aria-pressed', String(!on));
-      if (on) delete chosenRooms[s.a]; else chosenRooms[s.a] = s.seed;
-      tally();
-    };
-    $('chips').appendChild(c);
-  });
-
-  var lastCount = S.length;
-  function tally() {
-    var rooms, people;
-    if (!picking) {
-      rooms = S.length;
-      people = S.reduce(function (a, s) { return a + s.seed; }, 0);
-    } else {
-      var keys = Object.keys(chosenRooms);
-      rooms = keys.length;
-      people = keys.reduce(function (a, k) { return a + chosenRooms[k]; }, 0);
-    }
-    lastCount = rooms;
-    var n = $('postN');
-    if (n) n.textContent = rooms;
-    $('reachN').textContent = people.toLocaleString('en-US');
-    $('postBtn').disabled = rooms === 0;
-  }
-
-  $('aTitle').oninput = function () { $('pvT').textContent = this.value || 'Your headline'; };
-  $('aBody').oninput = function () { $('pvB').textContent = this.value || 'Your note.'; };
-
-  $('postBtn').onclick = function () {
-    var title = $('aTitle').value.trim();
-    if (!title) { $('aTitle').focus(); return; }
-    var days = Number(document.querySelector('#expiry .opt[aria-pressed="true"]').dataset.days);
-    put('notice', {
-      id: String(Date.now()),
-      by: (me && me.name) || 'a host',
-      title: title,
-      body: $('aBody').value.trim(),
-      all: !picking,
-      rooms: Object.keys(chosenRooms),
-      until: days ? Date.now() + days * 86400000 : 0
-    });
-    var b = this, count = lastCount;
-    b.textContent = '✓ Pinned to ' + count + ' rooms';
-    setTimeout(function () {
-      b.textContent = '';
-      b.appendChild(document.createTextNode('Pin to '));
-      var sp = document.createElement('span'); sp.id = 'postN'; sp.textContent = count;
-      b.appendChild(sp);
-      b.appendChild(document.createTextNode(' rooms'));
-    }, 2000);
-  };
-  $('clearBtn').onclick = function () { put('notice', null); alert('Notice taken down.'); };
-  $('annBack').onclick = function () { drawNotice(); show('vRoom'); };
-
-  /* Host view is reachable at #announce until real roles exist. */
+  /* ── host view ───────────────────────────────────────────────── */
   function checkHash() {
-    if (location.hash === '#announce') {
-      $('pvWho').textContent = (me && me.name) || 'you';
-      var d = new Date(Date.now() + 14 * 86400000);
-      $('exp14').textContent = 'Clears itself on ' + d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
-      tally();
-      show('vAnn');
-    }
+    if (location.hash !== '#announce') return;
+    $('pvWho').textContent = (me && me.name) || 'you';
+    var d = new Date(Date.now() + 14 * 86400000);
+    $('exp14').textContent = 'Clears itself on ' + d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+    tally();
+    show('vAnn');
   }
   window.addEventListener('hashchange', checkHash);
 
-  /* ── boot ────────────────────────────────────────────────── */
-  drawGrid('');
-
-  /* ?voice=OH — this tab was opened from the embed so someone could talk.
-     Land in that room and turn the microphone on without a second press. */
+  /* ── boot ────────────────────────────────────────────────────── */
   var wantVoice = (location.search.match(/[?&]voice=([A-Z]{2})/) || [])[1];
 
-  if (me) {
-    $('em').value = me.email || '';
-    $('nm').value = me.name;
-    $('cty').value = me.city || '';
-    sel.value = me.state;
-    openRoom(wantVoice ? byAbbr(wantVoice) : room);
-    if (wantVoice && !framed) {
-      $('vNames').textContent = 'Opening your microphone…';
-      startMic().catch(function () {
-        micBtn.className = 'jn';
-        micBtn.textContent = '🎙 Join the mic';
-        $('vNames').textContent = 'Press the button when you are ready to talk';
-      });
+  window.DB_READY.then(function (store) {
+    db = store;
+    updateBanner();
+    return db.init();
+  }).then(function (profile) {
+    me = profile;
+    if (me) {
+      $('em').value = me.email || '';
+      $('nm').value = me.name;
+      $('cty').value = me.city || '';
+      sel.value = me.state;
+      cityHint();
+      openRoom(byAbbr(wantVoice || me.state));
+      if (wantVoice && !framed) {
+        $('vNames').textContent = 'Opening your microphone…';
+        startMic().catch(function () {
+          micBtn.className = 'jn';
+          micBtn.textContent = '🎙 Join the mic';
+          $('vNames').textContent = 'Press the button when you are ready to talk';
+        });
+      }
+    } else {
+      cityHint();
+      paintSwatches();
+      show('vJoin');
     }
-  } else {
-    paintSwatches();
-    show('vJoin');
-  }
-  checkHash();
-
-  if (!storageWorks) {
-    var warn = $('pbar');
-    warn.hidden = false;
-    warn.firstElementChild.innerHTML =
-      '<b>Heads up.</b> This browser is blocking storage inside the embed — you will be asked to set up again next visit. Worth knowing.';
-  }
+    checkHash();
+  }).catch(function (err) {
+    console.error('Could not start:', err);
+    cityHint(); paintSwatches(); show('vJoin');
+  });
 })();

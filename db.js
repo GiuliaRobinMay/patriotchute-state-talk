@@ -1,0 +1,283 @@
+/* The data layer.
+ *
+ * Two implementations behind one interface. Local keeps everything on the
+ * visitor's own device and is what runs before the database exists; Shared
+ * talks to Supabase and is what makes two people see the same room.
+ *
+ * app.js never knows which one it has. If Supabase is configured but
+ * unreachable, we fall back to Local rather than showing a broken screen —
+ * a member with no connection should still see their own history.
+ */
+(function () {
+  'use strict';
+
+  var KEY = 'stateRooms.v1.';
+
+  /* ── device storage, wrapped ──────────────────────────────────────
+     An embedded page is exactly where localStorage throws: Safari
+     partitions it and private modes disable it. Fall back to memory. */
+  var memory = {}, works = true;
+  try {
+    localStorage.setItem(KEY + 'probe', '1');
+    localStorage.removeItem(KEY + 'probe');
+  } catch (e) { works = false; }
+
+  function put(k, v) {
+    var s = JSON.stringify(v);
+    memory[k] = s;
+    if (works) { try { localStorage.setItem(KEY + k, s); } catch (e) { works = false; } }
+  }
+  function get(k, fallback) {
+    var raw = null;
+    if (works) { try { raw = localStorage.getItem(KEY + k); } catch (e) { works = false; } }
+    if (raw === null) raw = memory[k] || null;
+    if (raw === null) return fallback;
+    try { return JSON.parse(raw); } catch (e) { return fallback; }
+  }
+
+  /* ── preview mode: this device only ──────────────────────────── */
+  var Local = {
+    shared: false,
+    storageWorks: function () { return works; },
+
+    init: function () { return Promise.resolve(get('profile', null)); },
+
+    saveProfile: function (p) { put('profile', p); return Promise.resolve(p); },
+
+    signOut: function () { put('profile', null); return Promise.resolve(); },
+
+    messages: function (room) { return Promise.resolve(get('msgs.' + room, [])); },
+
+    send: function (room, msg) {
+      var all = get('msgs.' + room, []);
+      all.push(msg);
+      if (all.length > 300) all = all.slice(-300);
+      put('msgs.' + room, all);
+      return Promise.resolve(msg);
+    },
+
+    onMessages: function () { return function () {}; },
+
+    members: function (state, me) {
+      return Promise.resolve(me ? [{
+        name: me.name, city: me.city, bg: me.bg, fg: me.fg,
+        photo: me.photo, online: true, you: true
+      }] : []);
+    },
+
+    onPresence: function () { return function () {}; },
+
+    notice: function () {
+      var n = get('notice', null);
+      if (n && n.until && Date.now() > n.until) { put('notice', null); return Promise.resolve(null); }
+      return Promise.resolve(n);
+    },
+    setNotice: function (n) { put('notice', n); return Promise.resolve(); },
+    clearNotice: function () { put('notice', null); return Promise.resolve(); },
+
+    dismissed: function (id) { return get('dismissed.' + id, false); },
+    dismiss: function (id) { put('dismissed.' + id, true); },
+    pref: get,
+    setPref: put
+  };
+
+  /* ── shared mode: everyone sees the same room ────────────────── */
+  function Shared(client) {
+    var uid = null, cache = {};
+
+    function row2msg(r, who) {
+      return {
+        id: r.id,
+        name: (who && who.name) || r.name || 'Someone',
+        city: (who && who.city) || r.city || '',
+        bg: (who && who.bg) || r.bg,
+        fg: (who && who.fg) || r.fg,
+        photo: (who && who.photo) || r.photo,
+        text: r.body,
+        ts: new Date(r.created_at).getTime()
+      };
+    }
+
+    return {
+      shared: true,
+      storageWorks: function () { return works; },
+
+      /* Anonymous sign-in: a real account with a real id, created without
+         asking anyone for an email or a password. It persists in this
+         browser, which is why a different browser is a different person. */
+      init: function () {
+        return client.auth.getSession().then(function (r) {
+          if (r.data && r.data.session) return r.data.session;
+          return client.auth.signInAnonymously().then(function (r2) {
+            if (r2.error) throw r2.error;
+            return r2.data.session;
+          });
+        }).then(function (session) {
+          uid = session.user.id;
+          return client.from('profiles').select('*').eq('id', uid).maybeSingle();
+        }).then(function (r) {
+          if (r.error) throw r.error;
+          if (!r.data) return null;
+          return {
+            id: uid, name: r.data.name, city: r.data.city, state: r.data.state,
+            bg: r.data.bg, fg: r.data.fg, photo: r.data.photo,
+            email: r.data.email, host: r.data.is_host
+          };
+        });
+      },
+
+      saveProfile: function (p) {
+        return client.from('profiles').upsert({
+          id: uid, name: p.name, city: p.city, state: p.state,
+          bg: p.bg, fg: p.fg, photo: p.photo, email: p.email,
+          updated_at: new Date().toISOString()
+        }).select().single().then(function (r) {
+          if (r.error) throw r.error;
+          p.id = uid;
+          p.host = r.data.is_host;
+          return p;
+        });
+      },
+
+      signOut: function () { return client.auth.signOut(); },
+
+      messages: function (room) {
+        return client.from('messages')
+          .select('id, body, created_at, author, profiles(name, city, bg, fg, photo)')
+          .eq('room', room)
+          .order('created_at', { ascending: false })
+          .limit(200)
+          .then(function (r) {
+            if (r.error) throw r.error;
+            return r.data.reverse().map(function (row) {
+              if (row.profiles) cache[row.author] = row.profiles;
+              return row2msg(row, row.profiles);
+            });
+          });
+      },
+
+      send: function (room, msg) {
+        return client.from('messages')
+          .insert({ room: room, author: uid, body: msg.text })
+          .select().single()
+          .then(function (r) {
+            if (r.error) throw r.error;
+            return row2msg(r.data, msg);
+          });
+      },
+
+      /* New rows arrive without the author's name attached, so look it up
+         once per person and remember it. */
+      onMessages: function (room, cb) {
+        var ch = client.channel('room:' + room)
+          .on('postgres_changes',
+              { event: 'INSERT', schema: 'public', table: 'messages', filter: 'room=eq.' + room },
+              function (payload) {
+                var r = payload.new;
+                if (r.author === uid) return;          // already on screen
+                if (cache[r.author]) { cb(row2msg(r, cache[r.author])); return; }
+                client.from('profiles').select('name, city, bg, fg, photo')
+                  .eq('id', r.author).maybeSingle()
+                  .then(function (p) {
+                    if (p.data) cache[r.author] = p.data;
+                    cb(row2msg(r, p.data));
+                  });
+              })
+          .subscribe();
+        return function () { client.removeChannel(ch); };
+      },
+
+      members: function (state, me) {
+        return client.from('profiles')
+          .select('id, name, city, bg, fg, photo')
+          .eq('state', state)
+          .order('updated_at', { ascending: false })
+          .limit(500)
+          .then(function (r) {
+            if (r.error) throw r.error;
+            return r.data.map(function (p) {
+              return {
+                id: p.id, name: p.name, city: p.city, bg: p.bg, fg: p.fg,
+                photo: p.photo, you: p.id === uid, online: p.id === uid
+              };
+            });
+          });
+      },
+
+      /* Presence is ephemeral by nature — nobody needs it written down. */
+      onPresence: function (room, me, cb) {
+        var ch = client.channel('presence:' + room, { config: { presence: { key: uid } } });
+        ch.on('presence', { event: 'sync' }, function () {
+          cb(Object.keys(ch.presenceState()));
+        }).subscribe(function (status) {
+          if (status === 'SUBSCRIBED') ch.track({ name: me.name, at: Date.now() });
+        });
+        return function () { client.removeChannel(ch); };
+      },
+
+      notice: function (room) {
+        return client.from('notices')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(20)
+          .then(function (r) {
+            if (r.error) throw r.error;
+            var now = Date.now();
+            var hit = (r.data || []).filter(function (n) {
+              if (n.until && new Date(n.until).getTime() < now) return false;
+              return !n.rooms.length || n.rooms.indexOf(room) > -1;
+            })[0];
+            if (!hit) return null;
+            return {
+              id: String(hit.id), by: hit.author_name, title: hit.title,
+              body: hit.body, until: hit.until ? new Date(hit.until).getTime() : 0
+            };
+          });
+      },
+
+      setNotice: function (n) {
+        return client.from('notices').insert({
+          title: n.title, body: n.body, rooms: n.all ? [] : n.rooms,
+          author: uid, author_name: n.by,
+          until: n.until ? new Date(n.until).toISOString() : null
+        }).then(function (r) { if (r.error) throw r.error; });
+      },
+
+      clearNotice: function () {
+        return client.from('notices').delete().neq('id', -1)
+          .then(function (r) { if (r.error) throw r.error; });
+      },
+
+      dismissed: function (id) { return get('dismissed.' + id, false); },
+      dismiss: function (id) { put('dismissed.' + id, true); },
+      pref: get,
+      setPref: put
+    };
+  }
+
+  /* ── pick one ─────────────────────────────────────────────────── */
+  var cfg = window.CONFIG || {};
+  var configured = !!(cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY);
+
+  window.DB = Local;
+  window.DB_READY = new Promise(function (resolve) {
+    if (!configured || !window.supabase) { resolve(Local); return; }
+    try {
+      var client = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, {
+        auth: { persistSession: true, autoRefreshToken: true, storageKey: KEY + 'auth' }
+      });
+      var shared = Shared(client);
+      /* Prove the connection works before handing it to the app. */
+      shared.init().then(function (profile) {
+        window.DB = shared;
+        resolve(shared, profile);
+      }).catch(function (err) {
+        console.warn('Shared mode unavailable, staying on this device:', err && err.message);
+        resolve(Local);
+      });
+    } catch (e) {
+      console.warn('Could not reach the database:', e && e.message);
+      resolve(Local);
+    }
+  });
+})();

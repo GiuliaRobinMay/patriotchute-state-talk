@@ -62,21 +62,6 @@
     </div>
   </section>
 
-  <!-- ── ROOMS ── -->
-  <section class="view" id="vRooms" aria-label="All rooms">
-    <div class="rhead">
-      <div>
-        <h1>Fifty-one rooms, one space</h1>
-        <p class="hint" style="margin-top:3px">Teal means someone's talking out loud in there right now.</p>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input class="srch" id="q" type="search" placeholder="Search states…" aria-label="Search states">
-        <button class="btn g" type="button" id="meBtn" style="padding:9px 13px;font-size:13px">Me</button>
-      </div>
-    </div>
-    <div class="grid" id="grid"></div>
-  </section>
-
   <!-- ── A ROOM ── -->
   <section class="view" id="vRoom" aria-label="Room">
     <div class="room">
@@ -84,7 +69,6 @@
 
       <div class="mid">
         <div class="top">
-          <button class="back" type="button" id="backBtn" aria-label="All rooms" hidden>&larr;</button>
           <span class="av" id="tAb" style="background:#BF3B2E;color:#FBF8F2">OH</span>
           <div class="ttl">
             <h1 id="tNm">Ohio</h1>
@@ -170,8 +154,8 @@
           <div class="chips" id="chips" hidden></div>
         </div>
         <div class="reach">
-          <div class="big" id="reachN">0</div>
-          <div class="lb">people will see this</div>
+          <div class="big" id="reachN">Everyone</div>
+          <div class="lb">will see this</div>
         </div>
         <div class="pv">
           <div class="pl">How it lands</div>
@@ -190,7 +174,13 @@
 
 </div>
 
-<script src="states.js"></script>
-<script src="app.js"></script>
+<!-- Order matters: config, then the client, then the data layer, then the app.
+     `defer` keeps that order while letting the page paint first. If the
+     Supabase script fails to load, db.js quietly stays in preview mode. -->
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script defer src="config.js"></script>
+<script defer src="states.js"></script>
+<script defer src="db.js"></script>
+<script defer src="app.js"></script>
 </body>
 </html>

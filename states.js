@@ -24,23 +24,7 @@ window.STATES = [
 /* Rooms shown as "live" in the preview. Replaced by real voice presence later. */
 window.LIVE_SEED = ["OH","TX","FL","PA","MI","NC","GA","AZ"];
 
-/* Example members, shown until the database is connected so the roster design
-   can be judged. Every one of these disappears the moment real people exist.
-   Their city comes from CITIES below so nobody appears to live in the wrong
-   state. */
-window.SAMPLE_PEOPLE = [
-  {name:"Bee Ann",      online:true},
-  {name:"Tom Hargrove", online:true},
-  {name:"Kris N.",      online:true},
-  {name:"Marcus P.",    online:false},
-  {name:"Joan L.",      online:false},
-  {name:"Sam K.",       online:false},
-  {name:"Pat Whitfield",online:false},
-  {name:"Elena G.",     online:false}
-];
-
-/* A few real cities per state, used for the example roster and as the
-   placeholder in the join form. */
+/* A few real cities per state, used as the placeholder in the join form. */
 window.CITIES = {
   AL:["Birmingham","Huntsville","Mobile"], AK:["Anchorage","Fairbanks","Juneau"],
   AZ:["Phoenix","Tucson","Mesa"], AR:["Little Rock","Fayetteville","Fort Smith"],
