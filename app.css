@@ -61,6 +61,17 @@ button,input,select,textarea{font-family:inherit}
 .btn.g{background:transparent;color:var(--dim);border:1px solid var(--line2)}
 .btn.g:hover{background:var(--panel2);color:var(--text)}
 
+/* Google insists on its own mark and wording, so this button is the one
+   place the app steps outside its palette. */
+.btn.google{background:var(--paper);color:#1A2238;display:inline-flex;align-items:center;gap:10px;
+  align-self:stretch;justify-content:center;padding:13px 20px;font-size:15px}
+.btn.google:hover{filter:brightness(1.04)}
+.btn.google svg{width:19px;height:19px;flex:0 0 auto}
+
+.linkish{background:none;border:0;color:var(--faint);font-size:12.5px;cursor:pointer;
+  padding:6px 0;text-decoration:underline;text-underline-offset:3px;align-self:flex-start;margin-top:4px}
+.linkish:hover{color:var(--dim)}
+
 .f{display:flex;flex-direction:column;gap:7px}
 .f label{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint)}
 .f input,.f select,.f textarea{background:var(--panel);border:1px solid var(--line2);color:var(--text);

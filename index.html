@@ -24,16 +24,25 @@
   <section class="view on" id="vJoin" aria-label="Join">
     <div class="pane">
       <div class="mark"><span class="shield">SR</span><span class="mn">State Rooms<span> &middot; members only</span></span></div>
-      <h1>Find your people, by state.</h1>
-      <p class="lead">One screen and you're in. You'll only do this once.</p>
 
-      <div class="f">
-        <label for="em">Your community email <span style="text-transform:none;letter-spacing:0">— optional for now</span></label>
-        <input id="em" type="email" autocomplete="email" placeholder="you@example.com" enterkeyhint="next">
-        <p class="chk wait" id="emchk"></p>
+      <!-- Step 1: prove who you are, once, on any device -->
+      <div id="signinBox">
+        <h1>Find your people, by state.</h1>
+        <p class="lead" style="margin-top:12px">Sign in once and you're recognised on every device — phone, laptop, anywhere.</p>
+        <button class="btn google" type="button" id="googleBtn" style="margin-top:22px">
+          <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.6 30.2 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.8 6.1C12.3 13.2 17.6 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.6c0-1.6-.1-3.2-.4-4.6H24v9.1h12.4c-.5 2.9-2.2 5.3-4.6 7l7.6 5.9c4.4-4.1 6.7-10.1 6.7-17.4z"/><path fill="#FBBC05" d="M10.4 28.7a14.8 14.8 0 0 1 0-9.4l-7.8-6.1a24 24 0 0 0 0 21.6l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.8 2.3-8.3 2.3-6.4 0-11.7-3.7-13.6-8.9l-7.8 6.1C6.5 42.6 14.6 48 24 48z"/></svg>
+          Continue with Google
+        </button>
+        <p class="chk wait" id="authchk" style="margin-top:12px"></p>
+        <button class="linkish" type="button" id="anonBtn">Continue without an account &mdash; this device only</button>
       </div>
 
-      <div class="f">
+      <!-- Step 2: how the room should know you -->
+      <div id="profileBox" hidden>
+      <h1>Who are we talking to?</h1>
+      <p class="lead" style="margin-top:10px" id="whoLead">This is what your state room sees.</p>
+
+      <div class="f" style="margin-top:20px">
         <label for="nm">Your name &amp; picture</label>
         <div class="avrow" id="pick">
           <span class="av lg pk" role="button" tabindex="0" aria-pressed="true" data-bg="#BF3B2E" data-fg="#FBF8F2" style="background:#BF3B2E;color:#FBF8F2">?</span>
@@ -60,6 +69,7 @@
       <p class="hint" style="margin-top:-8px">Your city shows next to your name — it's what turns "someone in Ohio" into "someone forty minutes away."</p>
 
       <button class="btn" id="joinBtn">Take me in &rarr;</button>
+      </div>
     </div>
   </section>
 

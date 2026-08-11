@@ -45,6 +45,9 @@
   }
 
   /* ── state ───────────────────────────────────────────────────── */
+  var framed = true;
+  try { framed = window.self !== window.top; } catch (e) { framed = true; }
+
   var me = null;
   var room = byAbbr('OH');
   var onlineIds = {};
@@ -171,18 +174,75 @@
   }
   sel.onchange = function () { cityHint(); checkName(); };
 
-  /* Say nothing while a half-typed address is on screen — the old version
-     sat on "checking…" forever, which read as broken. */
-  var emchk = $('emchk');
-  $('em').oninput = function () {
-    var v = $('em').value.trim();
-    if (!v || !/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(v)) {
-      emchk.className = 'chk wait';
-      emchk.textContent = '';
+  /* ── signing in ──────────────────────────────────────────────
+     Google will not render its consent screen inside an iframe, so in the
+     embed the button opens a tab, signs in there, and hands the session
+     back by message. Outside a frame it is a plain redirect. */
+  var authchk = $('authchk');
+  var POPUP = 'authpopup';
+
+  function saySigningIn(msg, kind) {
+    authchk.className = 'chk ' + (kind || 'wait');
+    authchk.textContent = msg;
+  }
+
+  function popupUrl() {
+    return location.origin + location.pathname + '?' + POPUP + '=1';
+  }
+
+  function afterSignIn() {
+    return db.init().then(function (profile) {
+      me = profile;
+      if (me) { openRoom(byAbbr(me.state)); return; }
+      showProfileStep();
+    });
+  }
+
+  function showProfileStep() {
+    $('signinBox').hidden = true;
+    $('profileBox').hidden = false;
+    var mail = db.email && db.email();
+    $('whoLead').textContent = mail
+      ? 'Signed in as ' + mail + '. This is what your state room sees.'
+      : 'This is what your state room sees.';
+    cityHint(); paintSwatches();
+    show('vJoin');
+    $('nm').focus();
+  }
+
+  $('googleBtn').onclick = function () {
+    saySigningIn('Opening Google…');
+    if (!framed) {
+      db.signInWithGoogle(location.origin + location.pathname).catch(function (err) {
+        saySigningIn('✕ ' + ((err && err.message) || 'Could not start sign-in'), 'no');
+      });
       return;
     }
-    emchk.className = 'chk ok';
-    emchk.textContent = '✓ Saved with your profile';
+    var w = window.open(popupUrl(), 'stateRoomsSignIn', 'width=480,height=680');
+    if (!w) {
+      saySigningIn('✕ Your browser blocked the sign-in window — allow pop-ups for this site', 'no');
+      return;
+    }
+    saySigningIn('Waiting for Google in the other window…');
+  };
+
+  /* The sign-in tab posts its session here when it is done. */
+  window.addEventListener('message', function (e) {
+    if (e.origin !== location.origin) return;
+    var d = e.data;
+    if (!d || d.type !== 'stateRooms.session') return;
+    if (!d.tokens) { saySigningIn('✕ Sign-in was cancelled', 'no'); return; }
+    saySigningIn('Signed in — one moment…', 'ok');
+    db.adoptTokens(d.tokens).then(afterSignIn).catch(function (err) {
+      saySigningIn('✕ ' + ((err && err.message) || 'Could not finish sign-in'), 'no');
+    });
+  });
+
+  $('anonBtn').onclick = function () {
+    saySigningIn('One moment…');
+    db.signInAnonymous().then(afterSignIn).catch(function (err) {
+      saySigningIn('✕ ' + ((err && err.message) || 'Could not continue'), 'no');
+    });
   };
 
   $('joinBtn').onclick = function () {
@@ -201,7 +261,7 @@
     var btn = this;
     btn.disabled = true;
     var profile = {
-      email: $('em').value.trim(),
+      email: (db.email && db.email()) || '',
       name: name,
       city: $('cty').value.trim(),
       state: sel.value,
@@ -581,8 +641,6 @@
      permission from the frame, so asking there can only fail. When that's
      the case we open the room in its own tab instead of hitting a wall. */
   var micStream = null, micBtn = $('micBtn');
-  var framed = true;
-  try { framed = window.self !== window.top; } catch (e) { framed = true; }
 
   function micPermitted() {
     try {
@@ -696,14 +754,31 @@
   /* ── boot ────────────────────────────────────────────────────── */
   var wantVoice = (location.search.match(/[?&]voice=([A-Z]{2})/) || [])[1];
 
+  var isPopup = /[?&]authpopup=1/.test(location.search);
+
   window.DB_READY.then(function (store) {
     db = store;
     updateBanner();
-    return db.init();
+    return db.init().then(function (profile) { return profile; });
   }).then(function (profile) {
+
+    /* This window exists only to complete Google and hand the session back. */
+    if (isPopup) {
+      document.body.style.background = 'var(--nav)';
+      if (db.hasSession()) {
+        return db.tokens().then(function (t) {
+          if (window.opener) {
+            window.opener.postMessage({ type: 'stateRooms.session', tokens: t }, location.origin);
+          }
+          window.close();
+        });
+      }
+      return db.signInWithGoogle(location.origin + location.pathname + '?authpopup=1');
+    }
+
     me = profile;
+
     if (me) {
-      $('em').value = me.email || '';
       $('nm').value = me.name;
       $('cty').value = me.city || '';
       sel.value = me.state;
@@ -717,14 +792,16 @@
           $('vNames').textContent = 'Press the button when you are ready to talk';
         });
       }
+    } else if (db.hasSession()) {
+      showProfileStep();          // signed in, but we don't know them yet
     } else {
-      cityHint();
-      paintSwatches();
+      $('signinBox').hidden = false;
+      $('profileBox').hidden = true;
       show('vJoin');
     }
     checkHash();
   }).catch(function (err) {
     console.error('Could not start:', err);
-    cityHint(); paintSwatches(); show('vJoin');
+    show('vJoin');
   });
 })();

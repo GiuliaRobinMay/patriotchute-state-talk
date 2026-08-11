@@ -72,6 +72,13 @@
 
     nameTaken: function () { return Promise.resolve(false); },
 
+    hasSession: function () { return true; },
+    email: function () { return ''; },
+    signInWithGoogle: function () { return Promise.reject(new Error('Preview mode — no database configured')); },
+    signInAnonymous: function () { return Promise.resolve(null); },
+    tokens: function () { return Promise.resolve(null); },
+    adoptTokens: function () { return Promise.resolve(); },
+
     onPresence: function () { return function () {}; },
 
     notice: function () {
@@ -90,7 +97,7 @@
 
   /* ── shared mode: everyone sees the same room ────────────────── */
   function Shared(client) {
-    var uid = null, cache = {};
+    var uid = null, authEmail = '', cache = {};
 
     function row2msg(r, who) {
       return {
@@ -110,34 +117,67 @@
       shared: true,
       storageWorks: function () { return works; },
 
-      /* Anonymous sign-in: a real account with a real id, created without
-         asking anyone for an email or a password. It persists in this
-         browser, which is why a different browser is a different person. */
+      /* Signing in no longer happens by itself. A Google account is the same
+         person on every device forever; an anonymous one exists only in the
+         browser that made it, which is why it is the fallback and not the
+         default. Returns the profile, or null when there is no session or no
+         profile yet — the app tells those two apart with hasSession(). */
       init: function () {
         return client.auth.getSession().then(function (r) {
-          if (r.data && r.data.session) return r.data.session;
-          return client.auth.signInAnonymously().then(function (r2) {
-            if (r2.error) throw r2.error;
-            return r2.data.session;
-          });
-        }).then(function (session) {
+          var session = r.data && r.data.session;
+          if (!session) { uid = null; return null; }
           uid = session.user.id;
-          return client.from('profiles').select('*').eq('id', uid).maybeSingle();
-        }).then(function (r) {
+          authEmail = (session.user.email) || '';
+          return client.from('profiles').select('*').eq('id', uid).maybeSingle()
+            .then(function (p) {
+              if (p.error) throw p.error;
+              if (!p.data) return null;
+              return {
+                id: uid, name: p.data.name, city: p.data.city, state: p.data.state,
+                bg: p.data.bg, fg: p.data.fg, photo: p.data.photo,
+                email: p.data.email, host: p.data.is_host
+              };
+            });
+        });
+      },
+
+      hasSession: function () { return !!uid; },
+      email: function () { return authEmail; },
+
+      signInWithGoogle: function (redirectTo) {
+        return client.auth.signInWithOAuth({
+          provider: 'google',
+          options: { redirectTo: redirectTo }
+        }).then(function (r) { if (r.error) throw r.error; });
+      },
+
+      signInAnonymous: function () {
+        return client.auth.signInAnonymously().then(function (r) {
           if (r.error) throw r.error;
-          if (!r.data) return null;
-          return {
-            id: uid, name: r.data.name, city: r.data.city, state: r.data.state,
-            bg: r.data.bg, fg: r.data.fg, photo: r.data.photo,
-            email: r.data.email, host: r.data.is_host
-          };
+          uid = r.data.session.user.id;
+          return null;
+        });
+      },
+
+      /* Used to carry a session from the sign-in tab back into the embed. */
+      tokens: function () {
+        return client.auth.getSession().then(function (r) {
+          var s = r.data && r.data.session;
+          return s ? { access_token: s.access_token, refresh_token: s.refresh_token } : null;
+        });
+      },
+      adoptTokens: function (t) {
+        return client.auth.setSession(t).then(function (r) {
+          if (r.error) throw r.error;
+          uid = r.data.session.user.id;
+          authEmail = r.data.session.user.email || '';
         });
       },
 
       saveProfile: function (p) {
         return client.from('profiles').upsert({
           id: uid, name: p.name, city: p.city, state: p.state,
-          bg: p.bg, fg: p.fg, photo: p.photo, email: p.email,
+          bg: p.bg, fg: p.fg, photo: p.photo, email: p.email || authEmail,
           updated_at: new Date().toISOString()
         }).select().single().then(function (r) {
           if (r.error) throw r.error;
@@ -306,10 +346,12 @@
         auth: { persistSession: true, autoRefreshToken: true, storageKey: KEY + 'auth' }
       });
       var shared = Shared(client);
-      /* Prove the connection works before handing it to the app. */
-      shared.init().then(function (profile) {
+      /* Prove the connection works before handing it to the app. This no
+         longer creates an account as a side effect — it just reads whatever
+         session this browser already has. */
+      shared.init().then(function () {
         window.DB = shared;
-        resolve(shared, profile);
+        resolve(shared);
       }).catch(function (err) {
         console.warn('Shared mode unavailable, staying on this device:', err && err.message);
         resolve(Local);
