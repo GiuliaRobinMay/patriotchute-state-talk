@@ -1,0 +1,30 @@
+[build]
+  publish = "public"
+  command = ""
+
+# The app is meant to be embedded in Mighty Networks, so the default
+# same-origin framing rules have to be relaxed. frame-ancestors is the
+# modern control; X-Frame-Options is deliberately absent because setting
+# it to anything other than DENY/SAMEORIGIN is ignored by browsers and
+# would only block the embed.
+#
+# Tighten the list once the community's real domain is known — replace
+# the wildcards with the exact host and nothing else will be able to
+# frame the app.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "frame-ancestors 'self' https://*.mn.co https://*.mightynetworks.com https://*.tribe.so"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Content-Type-Options = "nosniff"
+    Permissions-Policy = "microphone=(self), camera=()"
+
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

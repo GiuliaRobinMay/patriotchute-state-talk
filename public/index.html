@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>State Rooms</title>
+<meta name="description" content="A room for every state. Join, pick yours, and talk to people close by.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%23101B33'/><path d='M50 14 L84 26 L84 60 L50 86 L16 60 L16 26 Z' fill='%23BF3B2E'/></svg>">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- preview notice: removed once the database is wired up -->
+  <div class="pbar" id="pbar">
+    <span><b>Preview build.</b> Messages are saved on this device only — nobody else sees them yet.</span>
+    <a href="check.html" id="checkLink">Run the connection check &rarr;</a>
+    <button class="x" type="button" id="pbarX" aria-label="Hide this notice">✕</button>
+  </div>
+
+  <!-- ── JOIN ── -->
+  <section class="view on" id="vJoin" aria-label="Join">
+    <div class="pane">
+      <div class="mark"><span class="shield">SR</span><span class="mn">State Rooms<span> &middot; members only</span></span></div>
+      <h1>Find your people, by state.</h1>
+      <p class="lead">One screen and you're in. You'll only do this once.</p>
+
+      <div class="f">
+        <label for="em">Your community email</label>
+        <input id="em" type="email" autocomplete="email" placeholder="you@example.com" enterkeyhint="next">
+        <p class="chk wait" id="emchk"></p>
+      </div>
+
+      <div class="f">
+        <label for="nm">Your name &amp; picture</label>
+        <div class="avrow" id="pick">
+          <span class="av lg pk" role="button" tabindex="0" aria-pressed="true" data-bg="#BF3B2E" data-fg="#FBF8F2" style="background:#BF3B2E;color:#FBF8F2">?</span>
+          <span class="av lg pk" role="button" tabindex="0" aria-pressed="false" data-bg="#2E8B7C" data-fg="#03150F" style="background:#2E8B7C;color:#03150F">?</span>
+          <span class="av lg pk" role="button" tabindex="0" aria-pressed="false" data-bg="#4A6FA5" data-fg="#F4F1EA" style="background:#4A6FA5;color:#F4F1EA">?</span>
+          <span class="av lg pk" role="button" tabindex="0" aria-pressed="false" data-bg="#8E6BA8" data-fg="#F4F1EA" style="background:#8E6BA8;color:#F4F1EA">?</span>
+          <button class="btn g" type="button" id="upBtn" style="align-self:center;padding:9px 14px;font-size:13px">Upload</button>
+          <input type="file" id="upFile" accept="image/*" hidden>
+        </div>
+        <input id="nm" type="text" maxlength="24" placeholder="Dana R." style="margin-top:3px" enterkeyhint="next">
+      </div>
+
+      <div class="two">
+        <div class="f">
+          <label for="stt">Your state</label>
+          <select id="stt"></select>
+        </div>
+        <div class="f">
+          <label for="cty">Nearest city</label>
+          <input id="cty" type="text" maxlength="30" placeholder="Toledo" enterkeyhint="done">
+        </div>
+      </div>
+      <p class="hint" style="margin-top:-8px">Your city shows next to your name — it's what turns "someone in Ohio" into "someone forty minutes away."</p>
+
+      <button class="btn" id="joinBtn">Take me in &rarr;</button>
+    </div>
+  </section>
+
+  <!-- ── ROOMS ── -->
+  <section class="view" id="vRooms" aria-label="All rooms">
+    <div class="rhead">
+      <div>
+        <h1>Fifty-one rooms, one space</h1>
+        <p class="hint" style="margin-top:3px">Teal means someone's talking out loud in there right now.</p>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input class="srch" id="q" type="search" placeholder="Search states…" aria-label="Search states">
+        <button class="btn g" type="button" id="meBtn" style="padding:9px 13px;font-size:13px">Me</button>
+      </div>
+    </div>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <!-- ── A ROOM ── -->
+  <section class="view" id="vRoom" aria-label="Room">
+    <div class="room">
+      <nav class="rail" id="rail" aria-label="All states"></nav>
+
+      <div class="mid">
+        <div class="top">
+          <button class="back" type="button" id="backBtn" aria-label="All rooms">&larr;</button>
+          <span class="av sm" id="tAb" style="background:#BF3B2E;color:#FBF8F2">OH</span>
+          <h1 id="tNm">Ohio</h1>
+          <span class="meta" id="tCt"></span>
+        </div>
+
+        <div class="notice" id="notice" hidden>
+          <div class="nb">
+            <div class="nf" id="nFrom"></div>
+            <div class="nt" id="nTitle"></div>
+            <div class="nx" id="nBody"></div>
+          </div>
+          <button class="cl" type="button" id="nX" aria-label="Dismiss announcement">✕</button>
+        </div>
+
+        <div class="voice">
+          <span class="vlab"><i></i> On the mic</span>
+          <div class="mics" id="mics"></div>
+          <span class="vnames" id="vNames">Nobody yet — be the first</span>
+          <button class="jn" type="button" id="micBtn">🎙 Join the mic</button>
+        </div>
+
+        <div class="chat" id="chat"></div>
+
+        <form class="cmp" id="cmp">
+          <input id="ci" type="text" aria-label="Message" autocomplete="off" enterkeyhint="send">
+          <button class="snd" type="submit" aria-label="Send">↑</button>
+        </form>
+      </div>
+
+      <aside class="who" id="whoList"></aside>
+    </div>
+  </section>
+
+  <!-- ── ANNOUNCEMENTS (admin) ── -->
+  <section class="view" id="vAnn" aria-label="Post an announcement">
+    <div class="ann">
+      <div class="compose">
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="btn g" type="button" id="annBack" style="padding:7px 11px;font-size:13px">&larr;</button>
+          <div>
+            <h1>Post a notice</h1>
+            <p class="hint" style="margin-top:3px">It pins to the top of every room you choose. One post instead of fifty-six.</p>
+          </div>
+        </div>
+        <div class="f">
+          <label for="aTitle">Headline</label>
+          <input id="aTitle" type="text" maxlength="70" placeholder="Summer meet-ups are open for sign-up">
+        </div>
+        <div class="f">
+          <label for="aBody">The note</label>
+          <textarea id="aBody" placeholder="A sentence or two. Keep it short — it sits above the conversation."></textarea>
+        </div>
+        <div class="f">
+          <label>Take it down</label>
+          <div class="seg" id="expiry">
+            <button class="opt" type="button" aria-pressed="false" data-days="3"><span class="r"></span><span><b>In three days</b><em>Good for anything time-sensitive</em></span></button>
+            <button class="opt" type="button" aria-pressed="true" data-days="14"><span class="r"></span><span><b>In two weeks</b><em id="exp14"></em></span></button>
+            <button class="opt" type="button" aria-pressed="false" data-days="0"><span class="r"></span><span><b>When I remove it</b><em>Stays until you say otherwise</em></span></button>
+          </div>
+        </div>
+        <button class="btn" id="postBtn">Pin to <span id="postN">51</span> rooms</button>
+        <button class="btn g" type="button" id="clearBtn" style="font-size:13px;padding:9px 14px">Take down the current notice</button>
+      </div>
+
+      <aside class="side">
+        <div>
+          <div class="sl" style="margin-bottom:9px">Who sees it</div>
+          <div class="seg" id="aud">
+            <button class="opt" type="button" aria-pressed="true" data-all="1"><span class="r"></span><span><b>Every state</b><em>All 51 rooms</em></span></button>
+            <button class="opt" type="button" aria-pressed="false" data-all="0"><span class="r"></span><span><b>Rooms I choose</b><em>For anything regional</em></span></button>
+          </div>
+          <div class="chips" id="chips" hidden></div>
+        </div>
+        <div class="reach">
+          <div class="big" id="reachN">0</div>
+          <div class="lb">people will see this</div>
+        </div>
+        <div class="pv">
+          <div class="pl">How it lands</div>
+          <div class="notice" style="margin:0;box-shadow:none">
+            <div class="nb">
+              <div class="nf"><span>📌 Pinned by <b id="pvWho">you</b></span></div>
+              <div class="nt" id="pvT">Your headline</div>
+              <div class="nx" id="pvB">Your note.</div>
+            </div>
+          </div>
+          <p class="hint" style="margin-top:9px">Sits above the chat, not inside it. Each person can dismiss it once they've read it.</p>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+</div>
+
+<script src="states.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
