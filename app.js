@@ -132,6 +132,15 @@
 
   $('nm').oninput = paintSwatches;
 
+  /* Suggest a city from the state they just picked, so the field reads as an
+     example rather than a demand. */
+  function cityHint() {
+    var towns = (window.CITIES || {})[sel.value];
+    $('cty').placeholder = towns ? towns[0] : 'Your nearest city';
+  }
+  sel.onchange = cityHint;
+  cityHint();
+
   /* The member check is a placeholder until Zapier feeds a real list.
      The shape of the interaction is final — only the lookup changes. */
   var emchk = $('emchk');
@@ -257,11 +266,20 @@
   function openRoom(s) {
     room = s;
     put('lastRoom', s.a);
+
+    /* One state, one room: no sidebar to browse and nowhere to go back to. */
+    var solo = !!(me && !me.host);
+    document.querySelector('.room').classList.toggle('solo', solo);
+    $('backBtn').hidden = solo;
+
+    var online = (window.SAMPLE_PEOPLE || []).filter(function (p) { return p.online; }).length + (me ? 1 : 0);
     $('tNm').textContent = s.n;
     $('tAb').textContent = s.a;
-    $('tCt').textContent = headcount(s) + ' here';
+    $('tCt').textContent = headcount(s).toLocaleString('en-US') + ' members · ' + online + ' online now';
     $('ci').placeholder = 'Message ' + s.n + '…';
-    drawRail(); drawNotice(); drawChat(); drawWho();
+
+    if (!solo) drawRail();
+    drawNotice(); drawChat(); drawWho();
     show('vRoom');
   }
   $('backBtn').onclick = function () { drawGrid($('q').value); show('vRooms'); };
@@ -348,7 +366,10 @@
     var w = $('whoList');
     w.textContent = '';
 
-    var sample = window.SAMPLE_PEOPLE || [];
+    var towns = (window.CITIES || {})[room.a] || [];
+    var sample = (window.SAMPLE_PEOPLE || []).map(function (p, i) {
+      return { name: p.name, online: p.online, city: towns[i % towns.length] || '' };
+    });
     var online = sample.filter(function (p) { return p.online; });
     var offline = sample.filter(function (p) { return !p.online; });
     var total = headcount(room);

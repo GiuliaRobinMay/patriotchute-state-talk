@@ -25,17 +25,50 @@ window.STATES = [
 window.LIVE_SEED = ["OH","TX","FL","PA","MI","NC","GA","AZ"];
 
 /* Example members, shown until the database is connected so the roster design
-   can be judged. Every one of these disappears the moment real people exist. */
+   can be judged. Every one of these disappears the moment real people exist.
+   Their city comes from CITIES below so nobody appears to live in the wrong
+   state. */
 window.SAMPLE_PEOPLE = [
-  {name:"Bee Ann",     city:"Akron",      online:true},
-  {name:"Tom Hargrove",city:"Dayton",     online:true},
-  {name:"Kris N.",     city:"Toledo",     online:true},
-  {name:"Marcus P.",   city:"Dayton",     online:false},
-  {name:"Joan L.",     city:"Columbus",   online:false},
-  {name:"Sam K.",      city:"Cincinnati", online:false},
-  {name:"Pat Whitfield",city:"Cleveland", online:false},
-  {name:"Elena G.",    city:"Akron",      online:false}
+  {name:"Bee Ann",      online:true},
+  {name:"Tom Hargrove", online:true},
+  {name:"Kris N.",      online:true},
+  {name:"Marcus P.",    online:false},
+  {name:"Joan L.",      online:false},
+  {name:"Sam K.",       online:false},
+  {name:"Pat Whitfield",online:false},
+  {name:"Elena G.",     online:false}
 ];
+
+/* A few real cities per state, used for the example roster and as the
+   placeholder in the join form. */
+window.CITIES = {
+  AL:["Birmingham","Huntsville","Mobile"], AK:["Anchorage","Fairbanks","Juneau"],
+  AZ:["Phoenix","Tucson","Mesa"], AR:["Little Rock","Fayetteville","Fort Smith"],
+  CA:["Los Angeles","San Diego","Sacramento"], CO:["Denver","Colorado Springs","Boulder"],
+  CT:["Hartford","New Haven","Stamford"], DE:["Wilmington","Dover","Newark"],
+  FL:["Miami","Orlando","Tampa"], GA:["Atlanta","Savannah","Augusta"],
+  HI:["Honolulu","Hilo","Kailua"], ID:["Boise","Idaho Falls","Nampa"],
+  IL:["Chicago","Springfield","Peoria"], IN:["Indianapolis","Fort Wayne","Bloomington"],
+  IA:["Des Moines","Cedar Rapids","Davenport"], KS:["Wichita","Topeka","Overland Park"],
+  KY:["Louisville","Lexington","Bowling Green"], LA:["New Orleans","Baton Rouge","Shreveport"],
+  ME:["Portland","Bangor","Augusta"], MD:["Baltimore","Annapolis","Frederick"],
+  MA:["Boston","Worcester","Springfield"], MI:["Detroit","Grand Rapids","Ann Arbor"],
+  MN:["Minneapolis","Saint Paul","Duluth"], MS:["Jackson","Gulfport","Hattiesburg"],
+  MO:["Kansas City","St. Louis","Springfield"], MT:["Billings","Missoula","Bozeman"],
+  NE:["Omaha","Lincoln","Grand Island"], NV:["Las Vegas","Reno","Henderson"],
+  NH:["Manchester","Nashua","Concord"], NJ:["Newark","Jersey City","Princeton"],
+  NM:["Albuquerque","Santa Fe","Las Cruces"], NY:["Buffalo","Rochester","Albany"],
+  NC:["Charlotte","Raleigh","Asheville"], ND:["Fargo","Bismarck","Grand Forks"],
+  OH:["Columbus","Cleveland","Dayton"], OK:["Oklahoma City","Tulsa","Norman"],
+  OR:["Portland","Eugene","Bend"], PA:["Philadelphia","Pittsburgh","Harrisburg"],
+  RI:["Providence","Newport","Warwick"], SC:["Charleston","Columbia","Greenville"],
+  SD:["Sioux Falls","Rapid City","Pierre"], TN:["Nashville","Memphis","Knoxville"],
+  TX:["Houston","Austin","Dallas"], UT:["Salt Lake City","Provo","Ogden"],
+  VT:["Burlington","Montpelier","Rutland"], VA:["Richmond","Norfolk","Roanoke"],
+  WA:["Seattle","Spokane","Tacoma"], WV:["Charleston","Huntington","Morgantown"],
+  WI:["Milwaukee","Madison","Green Bay"], WY:["Cheyenne","Casper","Laramie"],
+  DC:["Washington","Georgetown","Anacostia"]
+};
 
 /* Avatar colours, paired so text stays legible on each. */
 window.AV_COLORS = [
