@@ -1,28 +1,34 @@
-/* The rough voice test.
+/* The voice layer.
  *
  * Browsers talking straight to each other (WebRTC), with Supabase realtime
- * as the introduction service — who is in the call, and the handshake
- * messages that let two browsers find a route. No media server: audio goes
- * peer to peer. That's deliberately modest — it holds up for a handful of
- * people on the mic, which is what a test needs. If voice proves out,
- * a media server (LiveKit) replaces this file and nothing else.
+ * as the introduction service. No media server: audio goes peer to peer,
+ * which holds up for a handful of speakers — if voice proves out, LiveKit
+ * replaces this file and nothing else changes.
  *
- * Two roles share one channel per room:
- *   watch(room, cb)          — see who is on the mic, without joining
- *   join(room, profile, s)   — take the mic with a microphone stream
+ * Three ways to be in a room's voice channel:
+ *   watch(room, cb)     — see the call from the chat view, not in it at all
+ *   listen(room, who)   — sit in the talk room and hear the speakers
+ *   join(room, who, s)  — take the mic with a microphone stream
+ *
+ * Connections exist only where audio can flow: every speaker pairs with
+ * everyone present; two listeners have nothing to exchange. When someone's
+ * role changes, both sides tear the pair down and rebuild it — blunt, but
+ * always correct, and this is a test rig.
  */
 (function () {
   'use strict';
 
-  /* Random per-tab identity. Deliberately not the account id: the same
+  /* Random per-tab identity, deliberately not the account id: the same
      person may listen in the embed and talk in the pop-out tab at once. */
   var myId = 'v' + Math.random().toString(36).slice(2, 10);
 
   var chan = null, room = null, subscribed = false, pendingTrack = false;
   var ui = function () {};
-  var joined = false, localStream = null, localMeta = null;
+  var myRole = null;                    // null | 'listen' | 'mic'
+  var localMeta = null, localStream = null;
   var localCtx = null, localAn = null, localTalking = false;
-  var peers = {};              // remoteId -> {pc, audio, ctx, an, talking}
+  var peers = {};                       // remoteId -> {pc, audio, ctx, an, talking}
+  var roles = {};                       // last seen role per presence key
   var rafOn = false;
 
   var RTC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
@@ -32,34 +38,50 @@
   /* ── presence → the list the UI draws ─────────────────────────── */
   function emit() {
     var st = chan ? chan.presenceState() : {};
-    var list = [];
+    var list = [], newRoles = {};
     Object.keys(st).forEach(function (k) {
       var meta = (st[k] && st[k][0]) || {};
+      var role = meta.role || 'mic';
+      newRoles[k] = role;
       list.push({
         id: k,
         you: k === myId,
         name: meta.name || 'Someone',
         bg: meta.bg, fg: meta.fg,
-        talking: k === myId ? localTalking : !!(peers[k] && peers[k].talking)
+        role: role,
+        talking: role === 'mic' &&
+          (k === myId ? localTalking : !!(peers[k] && peers[k].talking))
       });
     });
-    list.sort(function (a, b) { return a.you ? -1 : b.you ? 1 : 0; });
-    if (joined) reconcile(Object.keys(st));
+    list.sort(function (a, b) {
+      if (a.role !== b.role) return a.role === 'mic' ? -1 : 1;
+      return a.you ? -1 : b.you ? 1 : 0;
+    });
+
+    /* A role change means the pair's wiring is wrong now — rebuild it. */
+    Object.keys(peers).forEach(function (id) {
+      if (roles[id] && newRoles[id] && roles[id] !== newRoles[id]) drop(id);
+    });
+    roles = newRoles;
+
+    if (myRole) reconcile(newRoles);
     ui(list);
   }
 
-  /* ── wiring: one connection per pair, lower id makes the offer ──── */
-  function reconcile(ids) {
-    ids.forEach(function (id) {
+  function reconcile(rolesMap) {
+    Object.keys(rolesMap).forEach(function (id) {
       if (id === myId || peers[id]) return;
+      if (myRole !== 'mic' && rolesMap[id] !== 'mic') return;   // nothing to carry
       if (myId < id) makeOffer(id);
-      /* otherwise wait: their offer creates our side */
+      /* otherwise their offer creates our side */
     });
     Object.keys(peers).forEach(function (id) {
-      if (ids.indexOf(id) === -1) drop(id);
+      if (!(id in rolesMap)) { drop(id); return; }
+      if (myRole !== 'mic' && rolesMap[id] !== 'mic') drop(id);
     });
   }
 
+  /* ── the wiring: lower id makes the offer ─────────────────────── */
   function makePc(id) {
     var pc = new RTCPeerConnection(RTC_CONFIG);
     if (localStream) {
@@ -74,6 +96,8 @@
 
   function makeOffer(id) {
     var pc = makePc(id);
+    /* A listener sends no audio, but must still ask to receive it. */
+    if (!localStream) pc.addTransceiver('audio', { direction: 'recvonly' });
     pc.createOffer().then(function (offer) {
       return pc.setLocalDescription(offer).then(function () {
         send(id, 'offer', offer);
@@ -82,7 +106,7 @@
   }
 
   function onSig(p) {
-    if (!joined || !p || p.to !== myId) return;
+    if (!myRole || !p || p.to !== myId) return;
     var entry = peers[p.from];
     if (p.kind === 'offer') {
       var pc = entry ? entry.pc : makePc(p.from);
@@ -116,7 +140,7 @@
       entry.audio.autoplay = true;
     }
     entry.audio.srcObject = stream;
-    entry.audio.play().catch(function () {});   // join was a click, so allowed
+    entry.audio.play().catch(function () {});   // entering was a click, so allowed
     var AC = window.AudioContext || window.webkitAudioContext;
     if (AC && !entry.ctx) {
       entry.ctx = new AC();
@@ -140,15 +164,15 @@
     if (rafOn) return;
     rafOn = true;
     (function tick() {
-      if (!joined && !Object.keys(peers).length) { rafOn = false; return; }
-      var changedFlag = false;
+      if (!myRole && !Object.keys(peers).length) { rafOn = false; return; }
+      var flipped = false;
       var lt = level(localAn) > 8;
-      if (lt !== localTalking) { localTalking = lt; changedFlag = true; }
+      if (lt !== localTalking) { localTalking = lt; flipped = true; }
       Object.keys(peers).forEach(function (id) {
         var t = level(peers[id].an) > 8;
-        if (t !== peers[id].talking) { peers[id].talking = t; changedFlag = true; }
+        if (t !== peers[id].talking) { peers[id].talking = t; flipped = true; }
       });
-      if (changedFlag) emit();
+      if (flipped) emit();
       requestAnimationFrame(tick);
     })();
   }
@@ -160,6 +184,14 @@
     try { if (entry.audio) { entry.audio.pause(); entry.audio.srcObject = null; } } catch (e) {}
     try { if (entry.ctx) entry.ctx.close(); } catch (e) {}
     delete peers[id];
+  }
+
+  function dropAll() { Object.keys(peers).forEach(drop); }
+
+  function announce() {
+    if (!chan || !localMeta) return;
+    if (subscribed) chan.track(localMeta);
+    else pendingTrack = true;
   }
 
   /* ── the channel ──────────────────────────────────────────────── */
@@ -178,14 +210,15 @@
     chan.subscribe(function (status) {
       if (status !== 'SUBSCRIBED') return;
       subscribed = true;
-      if (pendingTrack && localMeta) { chan.track(localMeta); pendingTrack = false; }
+      if (pendingTrack) { chan.track(localMeta); pendingTrack = false; }
       emit();
     });
     return true;
   }
 
   function teardown() {
-    Object.keys(peers).forEach(drop);
+    dropAll();
+    roles = {};
     if (chan) {
       var c = client();
       try { if (c) c.removeChannel(chan); } catch (e) {}
@@ -194,23 +227,43 @@
     subscribed = false;
   }
 
+  function stopLocalAudio() {
+    try { if (localCtx) localCtx.close(); } catch (e) {}
+    localCtx = null; localAn = null; localStream = null; localTalking = false;
+  }
+
   /* ── public ───────────────────────────────────────────────────── */
   window.Voice = {
 
-    /* See the call without being in it. Returns a stop function. */
     watch: function (ab, cb) {
       ui = cb || function () {};
       if (!ensure(ab)) { ui([]); return function () {}; }
       emit();
       return function () {
-        if (!joined && room === ab) teardown();
+        if (!myRole && room === ab) teardown();
       };
     },
 
-    join: function (ab, profile, stream) {
+    listen: function (ab, who) {
+      if (myRole === 'mic') return;      // already louder than a listener
+      localMeta = { name: who.name, bg: who.bg, fg: who.fg, role: 'listen' };
+      myRole = 'listen';
+      if (!ensure(ab)) return;
+      announce();
+      emit();
+    },
+
+    unlisten: function () {
+      if (myRole !== 'listen') return;
+      myRole = null;
+      dropAll();
+      try { if (chan) chan.untrack(); } catch (e) {}
+      emit();
+    },
+
+    join: function (ab, who, stream) {
       localStream = stream;
-      localMeta = { name: profile.name, bg: profile.bg, fg: profile.fg };
-      joined = true;
+      localMeta = { name: who.name, bg: who.bg, fg: who.fg, role: 'mic' };
       var AC = window.AudioContext || window.webkitAudioContext;
       if (AC) {
         localCtx = new AC();
@@ -219,20 +272,21 @@
         localAn.fftSize = 512;
         src.connect(localAn);
       }
+      /* Our old pairs were made without a microphone — rebuild them with one. */
+      dropAll();
+      myRole = 'mic';
       if (!ensure(ab)) return;
-      if (subscribed) chan.track(localMeta);
-      else pendingTrack = true;
+      announce();
       startLoop();
     },
 
     leave: function () {
-      joined = false;
-      pendingTrack = false;
-      localTalking = false;
+      if (myRole !== 'mic') return;
+      myRole = null;
+      dropAll();
+      stopLocalAudio();
+      localMeta = null;
       try { if (chan) chan.untrack(); } catch (e) {}
-      Object.keys(peers).forEach(drop);
-      try { if (localCtx) localCtx.close(); } catch (e) {}
-      localCtx = null; localAn = null; localStream = null; localMeta = null;
       emit();
     },
 
@@ -241,6 +295,7 @@
       localStream.getAudioTracks().forEach(function (t) { t.enabled = !m; });
     },
 
-    active: function () { return joined; }
+    active: function () { return myRole === 'mic'; },
+    present: function () { return !!myRole; }
   };
 })();

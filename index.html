@@ -87,7 +87,7 @@
           </div>
           <div class="rswitch" role="tablist" aria-label="Rooms">
             <button type="button" id="rsState" role="tab" aria-selected="true">Your state</button>
-            <button type="button" id="rsUsa" role="tab" aria-selected="false">🇺🇸 All America</button>
+            <button type="button" id="rsUsa" role="tab" aria-selected="false">🇺🇸 All USA</button>
           </div>
           <div class="menuwrap">
             <button class="mebtn" type="button" id="meBtn2" aria-expanded="false">
@@ -101,6 +101,11 @@
               <button type="button" id="mOut">Sign out</button>
             </div>
           </div>
+        </div>
+
+        <div class="vtabs" role="tablist" aria-label="Chat or Live Room">
+          <button type="button" id="tabChat" role="tab" aria-selected="true">💬 Chat</button>
+          <button type="button" id="tabTalk" role="tab" aria-selected="false">🎙 Live Room</button>
         </div>
 
         <div class="notice" id="notice" hidden>
@@ -119,6 +124,21 @@
           <span class="vnames" id="vNames">Nobody yet — be the first</span>
           <button class="jn" type="button" id="micBtn">🎙 Join the mic</button>
           <button class="jn out" type="button" id="muteBtn" hidden>🔇 Mute</button>
+        </div>
+
+        <div class="talk" id="vTalk" hidden>
+          <div>
+            <div class="tlab">On the mic · <span id="stageN">0</span></div>
+            <div class="stage" id="stageMics"></div>
+          </div>
+          <div>
+            <div class="tlab">Listening · <span id="earN">0</span></div>
+            <div class="earGrid" id="stageEars"></div>
+          </div>
+          <div class="talkctl">
+            <button class="btn" id="talkJoin">🎙 Join the mic</button>
+            <button class="btn g" type="button" id="talkMute" hidden>🔇 Mute</button>
+          </div>
         </div>
 
         <div class="chat" id="chat"></div>
