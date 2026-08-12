@@ -22,7 +22,11 @@
     var d = new Date(ts), h = d.getHours(), m = String(d.getMinutes()).padStart(2, '0');
     return (h % 12 || 12) + ':' + m + ' ' + (h < 12 ? 'AM' : 'PM');
   }
+  /* One room the whole community shares, alongside the state rooms. */
+  var USA = { n: 'All America', a: 'US' };
+
   function byAbbr(a) {
+    if (a === 'US') return USA;
     for (var i = 0; i < S.length; i++) if (S[i].a === a) return S[i];
     return S[34];
   }
@@ -60,6 +64,7 @@
   var members = [];
   var stopMessages = function () {};
   var stopPresence = function () {};
+  var stopVoiceWatch = function () {};
 
   function show(v) {
     ['vJoin', 'vRoom', 'vAnn'].forEach(function (id) {
@@ -328,6 +333,12 @@
   function drawRail() {
     var rail = $('rail');
     rail.textContent = '';
+    var usa = document.createElement('button');
+    usa.type = 'button';
+    usa.className = 'ri' + (room.a === 'US' ? ' cur' : '');
+    usa.textContent = '🇺🇸 All America';
+    usa.onclick = function () { openRoom(USA); };
+    rail.appendChild(usa);
     var l = document.createElement('div'); l.className = 'rl'; l.textContent = 'All states';
     rail.appendChild(l);
     S.forEach(function (s) {
@@ -347,6 +358,10 @@
     var online = members.filter(function (p) { return p.online; }).length || (me ? 1 : 0);
     $('tNm').textContent = room.n;
     $('tAb').textContent = room.a;
+    if (room.a === 'US') {
+      $('tCt').textContent = 'the whole community · ' + online + ' here now';
+      return;
+    }
     $('tCt').textContent = members.length
       ? members.length.toLocaleString('en-US') + (members.length === 1 ? ' member · ' : ' members · ') + online + ' online now'
       : 'you are the first one here';
@@ -369,10 +384,20 @@
       $('meMail').textContent = mail || 'Signed in on this device only';
     }
 
+    if (me) {
+      $('rsState').textContent = byAbbr(me.state).n;
+      $('rsState').setAttribute('aria-selected', String(s.a !== 'US'));
+      $('rsUsa').setAttribute('aria-selected', String(s.a === 'US'));
+    }
+
     show('vRoom');
 
-    stopMessages(); stopPresence();
+    if (inCall) leaveVoice();
+    stopMessages(); stopPresence(); stopVoiceWatch();
     onlineIds = {};
+
+    if (db.shared && window.Voice) stopVoiceWatch = window.Voice.watch(s.a, renderVoice);
+    else renderVoice([]);
 
     loadChat();
     loadMembers();
@@ -383,15 +408,25 @@
       $('chat').scrollTop = $('chat').scrollHeight;
     });
     if (me) {
-      stopPresence = db.onPresence(s.a, me, function (ids) {
+      stopPresence = db.onPresence(s.a, me, function (people) {
         onlineIds = {};
-        ids.forEach(function (id) { onlineIds[id] = true; });
+        people.forEach(function (p) { onlineIds[p.id] = true; });
+        /* The national room has no state to look members up by, so whoever
+           presence says is here IS the roster. */
+        if (room.a === 'US') {
+          members = people.map(function (p) {
+            return { id: p.id, name: p.name || 'Someone', city: p.city,
+                     bg: p.bg, fg: p.fg, online: true, you: me && p.id === me.id };
+          });
+          markOnline();
+          return;
+        }
         /* Somebody online who wasn't in the list means a new member joined
            after this page loaded. Without this the roster stayed frozen at
            whoever existed when you opened the room. */
         var known = {};
         members.forEach(function (p) { known[p.id] = true; });
-        var stranger = ids.some(function (id) { return !known[id]; });
+        var stranger = people.some(function (p) { return !known[p.id]; });
         if (stranger) loadMembers(); else markOnline();
       });
     }
@@ -538,6 +573,12 @@
   }
 
   function loadMembers() {
+    if (room.a === 'US') {
+      members = me ? [{ id: me.id, name: me.name, city: me.city, bg: me.bg,
+                        fg: me.fg, photo: me.photo, online: true, you: true }] : [];
+      markOnline();
+      return;
+    }
     db.members(room.a, me).then(function (list) {
       members = list;
       markOnline();
@@ -562,6 +603,19 @@
         $('nFrom').appendChild(s2);
       }
       $('nTitle').textContent = n.title;
+      var when = $('nWhen');
+      if (n.starts) {
+        var wd = new Date(n.starts);
+        var live = Date.now() >= n.starts && Date.now() < n.starts + 3 * 3600000;
+        when.hidden = false;
+        when.classList.toggle('live', live);
+        when.textContent = (live ? '● Happening now — join the mic' : '🗓 ' +
+          wd.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }) +
+          ' · ' + wd.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) +
+          ' — your local time');
+      } else {
+        when.hidden = true;
+      }
       $('nBody').textContent = n.body || '';
       $('nX').onclick = function () { db.dismiss(n.id); box.hidden = true; };
     }).catch(function () { box.hidden = true; });
@@ -615,6 +669,8 @@
     var title = $('aTitle').value.trim();
     if (!title) { $('aTitle').focus(); return; }
     var days = Number(document.querySelector('#expiry .opt[aria-pressed="true"]').dataset.days);
+    var whenVal = $('aWhen').value;
+    var starts = whenVal ? new Date(whenVal).getTime() : 0;
     var b = this, count = lastCount;
     b.disabled = true;
     db.setNotice({
@@ -624,6 +680,7 @@
       body: $('aBody').value.trim(),
       all: !picking,
       rooms: Object.keys(chosenRooms),
+      starts: starts,
       until: days ? Date.now() + days * 86400000 : 0
     }).then(function () {
       b.textContent = '✓ Pinned to ' + count + ' rooms';
@@ -875,24 +932,40 @@
     $('vNames').textContent = 'Voice opened in its own tab — chat carries on here';
   }
 
-  function renderMics() {
+  var inCall = false;
+
+  /* One renderer for the strip, fed either by the live call (voice.js),
+     by the watch-only channel, or by the preview meter. */
+  function renderVoice(list) {
     var mics = $('mics');
     mics.textContent = '';
-    if (!micStream || !me) { $('vNames').textContent = 'Nobody yet — be the first'; return; }
-    var w = document.createElement('span'); w.className = 'w'; w.id = 'myMic';
-    var ring = document.createElement('span'); ring.className = 'ring';
-    var av = document.createElement('span'); av.className = 'av sm'; avatar(av, me);
-    w.appendChild(ring); w.appendChild(av);
-    mics.appendChild(w);
-    $('vNames').textContent = '';
-    var b = document.createElement('b'); b.textContent = me.name;
-    $('vNames').appendChild(b);
-    $('vNames').appendChild(document.createTextNode(' — your mic is live'));
+    var names = [];
+    list.forEach(function (p) {
+      var w = document.createElement('span');
+      w.className = 'w' + (p.talking ? ' talk' : '');
+      var ring = document.createElement('span'); ring.className = 'ring';
+      var av = document.createElement('span'); av.className = 'av sm';
+      avatar(av, { name: p.name, bg: p.bg, fg: p.fg });
+      w.appendChild(ring); w.appendChild(av);
+      mics.appendChild(w);
+      names.push(p.you ? 'you' : String(p.name).split(/\s+/)[0]);
+    });
+    var v = $('vNames');
+    if (!list.length) v.textContent = 'Nobody yet — be the first';
+    else if (list.length === 1) {
+      v.textContent = list[0].you
+        ? 'Your mic is live — talk while others join'
+        : names[0] + ' is on the mic';
+    } else {
+      v.textContent = names.join(', ') + ' are on the mic';
+    }
+    $('muteBtn').hidden = !inCall;
   }
 
-  function meter(stream) {
+  /* Preview mode has nobody to call — the strip just proves the mic works. */
+  function previewMeter(stream) {
     var Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return;
+    if (!Ctx || !me) return;
     var ctx = new Ctx();
     var src = ctx.createMediaStreamSource(stream);
     var an = ctx.createAnalyser();
@@ -904,40 +977,57 @@
       an.getByteFrequencyData(data);
       var sum = 0;
       for (var i = 0; i < data.length; i++) sum += data[i];
-      var el = $('myMic');
-      if (el) el.classList.toggle('talk', (sum / data.length) > 8);
+      renderVoice([{ you: true, name: me.name, bg: me.bg, fg: me.fg, talking: (sum / data.length) > 8 }]);
       requestAnimationFrame(tick);
     })();
   }
 
-  function startMic() {
+  function joinVoice() {
     micBtn.textContent = 'Asking…';
     return navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
       micStream = stream;
+      inCall = true;
       micBtn.className = 'jn out';
       micBtn.textContent = 'Leave the mic';
-      renderMics();
-      meter(stream);
+      var mb = $('muteBtn');
+      mb.hidden = false; mb.textContent = '🔇 Mute'; mb.dataset.muted = '';
+      if (db.shared && window.Voice) window.Voice.join(room.a, me, stream);
+      else previewMeter(stream);
     });
   }
 
-  micBtn.onclick = function () {
-    if (micStream) {
-      micStream.getTracks().forEach(function (t) { t.stop(); });
-      micStream = null;
-      micBtn.className = 'jn';
-      micBtn.textContent = '🎙 Join the mic';
-      renderMics();
-      return;
+  function leaveVoice() {
+    if (window.Voice && window.Voice.active()) window.Voice.leave();
+    if (micStream) micStream.getTracks().forEach(function (t) { t.stop(); });
+    micStream = null;
+    inCall = false;
+    micBtn.className = 'jn';
+    micBtn.textContent = '🎙 Join the mic';
+    $('muteBtn').hidden = true;
+    if (!db.shared) renderVoice([]);
+  }
+
+  $('muteBtn').onclick = function () {
+    var muted = !this.dataset.muted;
+    this.dataset.muted = muted ? '1' : '';
+    this.textContent = muted ? '🔊 Unmute' : '🔇 Mute';
+    if (window.Voice) window.Voice.setMuted(muted);
+    if (!db.shared && micStream) {
+      micStream.getAudioTracks().forEach(function (t) { t.enabled = !muted; });
     }
+  };
+
+  micBtn.onclick = function () {
+    if (inCall) { leaveVoice(); return; }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       micBtn.className = 'jn err';
       micBtn.textContent = 'Voice not supported here';
       return;
     }
     if (framed && micPermitted() === false) { popOut(); return; }
-    startMic().catch(function (err) {
+    joinVoice().catch(function (err) {
       var name = (err && err.name) || 'Error';
+      leaveVoice();
       if (name === 'NotAllowedError' && framed) { popOut(); return; }
       micBtn.className = 'jn err';
       micBtn.textContent = name === 'NotAllowedError' ? 'Microphone blocked' : 'No microphone found';
@@ -947,6 +1037,10 @@
     });
   };
   if (framed && micPermitted() === false) micBtn.textContent = '🎙 Open a tab to talk';
+
+  /* the state ↔ national switcher */
+  $('rsState').onclick = function () { if (me && room.a === 'US') openRoom(byAbbr(me.state)); };
+  $('rsUsa').onclick = function () { if (me && room.a !== 'US') openRoom(USA); };
 
   /* ── host view ───────────────────────────────────────────────── */
   function checkHash() {
@@ -961,6 +1055,7 @@
 
   /* ── boot ────────────────────────────────────────────────────── */
   var wantVoice = (location.search.match(/[?&]voice=([A-Z]{2})/) || [])[1];
+  if (wantVoice && wantVoice !== 'US' && !window.STATES.some(function (x) { return x.a === wantVoice; })) wantVoice = null;
 
   var isPopup = /[?&]authpopup=1/.test(location.search);
 
@@ -995,9 +1090,8 @@
       openRoom(byAbbr(wantVoice || me.state));
       if (wantVoice && !framed) {
         $('vNames').textContent = 'Opening your microphone…';
-        startMic().catch(function () {
-          micBtn.className = 'jn';
-          micBtn.textContent = '🎙 Join the mic';
+        joinVoice().catch(function () {
+          leaveVoice();
           $('vNames').textContent = 'Press the button when you are ready to talk';
         });
       }

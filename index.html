@@ -85,6 +85,10 @@
             <h1 id="tNm">Ohio</h1>
             <span class="meta" id="tCt"></span>
           </div>
+          <div class="rswitch" role="tablist" aria-label="Rooms">
+            <button type="button" id="rsState" role="tab" aria-selected="true">Your state</button>
+            <button type="button" id="rsUsa" role="tab" aria-selected="false">🇺🇸 All America</button>
+          </div>
           <div class="menuwrap">
             <button class="mebtn" type="button" id="meBtn2" aria-expanded="false">
               <span class="av xs" id="meAv"></span>
@@ -103,6 +107,7 @@
           <div class="nb">
             <div class="nf" id="nFrom"></div>
             <div class="nt" id="nTitle"></div>
+            <div class="nw" id="nWhen" hidden></div>
             <div class="nx" id="nBody"></div>
           </div>
           <button class="cl" type="button" id="nX" aria-label="Dismiss announcement">✕</button>
@@ -113,6 +118,7 @@
           <div class="mics" id="mics"></div>
           <span class="vnames" id="vNames">Nobody yet — be the first</span>
           <button class="jn" type="button" id="micBtn">🎙 Join the mic</button>
+          <button class="jn out" type="button" id="muteBtn" hidden>🔇 Mute</button>
         </div>
 
         <div class="chat" id="chat"></div>
@@ -172,7 +178,6 @@
           <div class="seg row" id="theme">
             <button class="opt" type="button" data-theme="dark" aria-pressed="true"><span class="r"></span><span><b>Dark</b></span></button>
             <button class="opt" type="button" data-theme="light" aria-pressed="false"><span class="r"></span><span><b>Light</b></span></button>
-            <button class="opt" type="button" data-theme="system" aria-pressed="false"><span class="r"></span><span><b>Match device</b></span></button>
           </div>
         </div>
       </div>
@@ -203,6 +208,11 @@
         <div class="f">
           <label for="aBody">The note</label>
           <textarea id="aBody" placeholder="A sentence or two. Keep it short — it sits above the conversation."></textarea>
+        </div>
+        <div class="f">
+          <label for="aWhen">Gather moment <span style="text-transform:none;letter-spacing:0">— optional</span></label>
+          <input id="aWhen" type="datetime-local">
+          <p class="hint">Set a time and the notice becomes an invitation — each member sees it in their own timezone.</p>
         </div>
         <div class="f">
           <label>Take it down</label>
@@ -253,6 +263,7 @@
 <script defer src="config.js"></script>
 <script defer src="states.js"></script>
 <script defer src="db.js"></script>
+<script defer src="voice.js"></script>
 <script defer src="app.js"></script>
 </body>
 </html>

@@ -46,8 +46,13 @@ create table if not exists notices (
   author      uuid not null references auth.users on delete cascade,
   author_name text not null,
   until       timestamptz,                     -- null means until taken down
+  starts_at   timestamptz,                     -- set = a gather moment
   created_at  timestamptz not null default now()
 );
+
+-- Gather moments were added after the first installs; this brings an
+-- existing database up to date. Harmless on a fresh one.
+alter table notices add column if not exists starts_at timestamptz;
 
 -- ── security ──────────────────────────────────────────────────────
 alter table profiles enable row level security;

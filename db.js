@@ -337,9 +337,15 @@
       onPresence: function (room, me, cb) {
         var ch = client.channel('presence:' + room, { config: { presence: { key: uid } } });
         ch.on('presence', { event: 'sync' }, function () {
-          cb(Object.keys(ch.presenceState()));
+          var st = ch.presenceState();
+          cb(Object.keys(st).map(function (k) {
+            var m = (st[k] && st[k][0]) || {};
+            return { id: k, name: m.name, city: m.city, bg: m.bg, fg: m.fg };
+          }));
         }).subscribe(function (status) {
-          if (status === 'SUBSCRIBED') ch.track({ name: me.name, at: Date.now() });
+          if (status === 'SUBSCRIBED') {
+            ch.track({ name: me.name, city: me.city, bg: me.bg, fg: me.fg });
+          }
         });
         return function () { client.removeChannel(ch); };
       },
@@ -359,17 +365,31 @@
             if (!hit) return null;
             return {
               id: String(hit.id), by: hit.author_name, title: hit.title,
-              body: hit.body, until: hit.until ? new Date(hit.until).getTime() : 0
+              body: hit.body, until: hit.until ? new Date(hit.until).getTime() : 0,
+              starts: hit.starts_at ? new Date(hit.starts_at).getTime() : 0
             };
           });
       },
 
       setNotice: function (n) {
-        return client.from('notices').insert({
+        var row = {
           title: n.title, body: n.body, rooms: n.all ? [] : n.rooms,
           author: uid, author_name: n.by,
           until: n.until ? new Date(n.until).toISOString() : null
-        }).then(function (r) { if (r.error) throw r.error; });
+        };
+        if (n.starts) row.starts_at = new Date(n.starts).toISOString();
+        return client.from('notices').insert(row).then(function (r) {
+          /* The gather column arrives by a one-line migration; until it has
+             run, pin the notice without the time rather than failing. */
+          if (r.error && row.starts_at && /starts_at/.test(r.error.message)) {
+            delete row.starts_at;
+            console.warn('notices.starts_at missing — run the alter in schema.sql');
+            return client.from('notices').insert(row).then(function (r2) {
+              if (r2.error) throw r2.error;
+            });
+          }
+          if (r.error) throw r.error;
+        });
       },
 
       clearNotice: function () {
@@ -401,6 +421,7 @@
           storageKey: KEY + 'auth'
         }
       });
+      window.__sbClient = client;   // voice.js signals over the same connection
       var shared = Shared(client);
       /* Prove the connection works before handing it to the app. This no
          longer creates an account as a side effect — it just reads whatever
