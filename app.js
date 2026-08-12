@@ -48,7 +48,7 @@
      away. Shown on the sign-in screen when a return trip fails, so the
      reason is on screen instead of needing to be dug out of the address
      bar by hand. */
-  var ARRIVED = location.search || '';
+  var ARRIVED = (location.search || '') + (location.hash || '');
 
   /* ── state ───────────────────────────────────────────────────── */
   var framed = true;

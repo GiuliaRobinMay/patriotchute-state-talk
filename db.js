@@ -115,10 +115,8 @@
           settled = true;
           try { sub.data.subscription.unsubscribe(); } catch (e) {}
           /* Drop ?code=... so a refresh doesn't try to spend it twice. */
-          if (/[?&](code|error)=/.test(location.search)) {
-            try {
-              history.replaceState({}, '', location.pathname + location.hash);
-            } catch (e) {}
+          if (/[?&#](code|error)=/.test(location.search + location.hash)) {
+            try { history.replaceState({}, '', location.pathname); } catch (e) {}
           }
           resolve(session || null);
         }
@@ -220,8 +218,9 @@
 
       /* Google reports refusals in the address bar rather than by throwing. */
       signInError: function () {
-        var m = location.search.match(/[?&]error_description=([^&]*)/)
-             || location.search.match(/[?&]error=([^&]*)/);
+        var where = location.search + location.hash;
+        var m = where.match(/[?&#]error_description=([^&]*)/)
+             || where.match(/[?&#]error=([^&]*)/);
         return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : '';
       },
 
