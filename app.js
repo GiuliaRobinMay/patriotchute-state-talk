@@ -342,15 +342,6 @@
     });
   }
 
-  function changeState() {
-    var name = prompt('Which state are you in now?', byAbbr(me.state).n);
-    if (!name) return;
-    var q = name.trim().toLowerCase(), found = null;
-    S.forEach(function (s) { if (s.n.toLowerCase() === q || s.a.toLowerCase() === q) found = s; });
-    if (!found) { alert('I don’t recognise “' + name + '”. Try the full state name.'); return; }
-    me.state = found.a;
-    db.saveProfile(me).then(function () { openRoom(found); });
-  }
 
   function setTitle() {
     var online = members.filter(function (p) { return p.online; }).length || (me ? 1 : 0);
@@ -681,11 +672,176 @@
   meBtn2.onclick = function (e) { e.stopPropagation(); toggleMenu(meMenu.hidden); };
   document.addEventListener('click', function () { toggleMenu(false); });
   meMenu.onclick = function (e) { e.stopPropagation(); };
-  $('mMove').onclick = function () { toggleMenu(false); changeState(); };
+  $('mSettings').onclick = function () { toggleMenu(false); openSettings(); };
   $('mOut').onclick = function () {
     toggleMenu(false);
     if (!confirm('Sign out and set up again on this device?')) return;
     db.signOut().then(function () { me = null; location.reload(); });
+  };
+
+  /* ── appearance ──────────────────────────────────────────────
+     Three states, not two: dark, light, or whatever the device says. */
+  var systemDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+
+  function applyTheme(choice) {
+    var wanted = choice === 'system'
+      ? (systemDark && systemDark.matches ? 'dark' : 'light')
+      : choice;
+    if (wanted === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    else document.documentElement.removeAttribute('data-theme');
+  }
+  if (systemDark && systemDark.addEventListener) {
+    systemDark.addEventListener('change', function () {
+      if (db.pref('theme', 'dark') === 'system') applyTheme('system');
+    });
+  }
+
+  /* ── settings ────────────────────────────────────────────────── */
+  var sSel = $('sStt');
+  S.forEach(function (s) {
+    var o = document.createElement('option');
+    o.value = s.a; o.textContent = s.n;
+    sSel.appendChild(o);
+  });
+
+  var sSwatches = [].slice.call(document.querySelectorAll('#sPick .pk'));
+  var sColor = null, sPhoto = null, sNameFree = true, sNameTimer = null;
+
+  function sPaint() {
+    var ini = initials($('sNm').value);
+    sSwatches.forEach(function (sw) {
+      if (sPhoto && sw.getAttribute('aria-pressed') === 'true') return;
+      sw.textContent = ini;
+      sw.style.background = sw.dataset.bg;
+      sw.style.color = sw.dataset.fg;
+    });
+  }
+  sSwatches.forEach(function (sw) {
+    sw.onclick = function () {
+      sPhoto = null;
+      sSwatches.forEach(function (x) { x.setAttribute('aria-pressed', String(x === sw)); });
+      sColor = { bg: sw.dataset.bg, fg: sw.dataset.fg };
+      sPaint();
+    };
+    sw.onkeydown = function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sw.onclick(); }
+    };
+  });
+
+  $('sUpBtn').onclick = function () { $('sUpFile').click(); };
+  $('sUpFile').onchange = function (e) {
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (file.size > 1.5 * 1024 * 1024) { alert('That image is over 1.5 MB — please pick a smaller one.'); return; }
+    var r = new FileReader();
+    r.onload = function () {
+      sPhoto = r.result;
+      var first = sSwatches[0];
+      sSwatches.forEach(function (x) { x.setAttribute('aria-pressed', String(x === first)); });
+      first.textContent = '';
+      first.style.background = 'transparent';
+      var img = new Image(); img.src = sPhoto; img.alt = '';
+      first.appendChild(img);
+    };
+    r.readAsDataURL(file);
+  };
+
+  /* Only complain about the name if they actually changed it. */
+  function sCheckName() {
+    var v = $('sNm').value.trim(), chk = $('sNmChk');
+    sNameFree = true;
+    if (!v) { chk.className = 'chk no'; chk.textContent = '✕ You need a name'; sNameFree = false; return; }
+    if (!db.shared || (me && v === me.name && sSel.value === me.state)) {
+      chk.className = 'chk wait'; chk.textContent = ''; return;
+    }
+    chk.className = 'chk wait'; chk.textContent = 'checking…';
+    db.nameTaken(sSel.value, v).then(function (taken) {
+      if ($('sNm').value.trim() !== v) return;
+      sNameFree = !taken;
+      chk.className = taken ? 'chk no' : 'chk ok';
+      chk.textContent = taken
+        ? '✕ Taken in ' + byAbbr(sSel.value).n + ' — try ' + suggest(v)
+        : '✓ Free in ' + byAbbr(sSel.value).n;
+    }).catch(function () { chk.className = 'chk wait'; chk.textContent = ''; });
+  }
+  $('sNm').oninput = function () {
+    sPaint();
+    clearTimeout(sNameTimer);
+    sNameTimer = setTimeout(sCheckName, 450);
+  };
+  sSel.onchange = sCheckName;
+
+  radio($('theme'), function (o) { applyTheme(o.dataset.theme); });
+
+  function openSettings() {
+    if (!me) return;
+    $('sNm').value = me.name;
+    $('sCty').value = me.city || '';
+    sSel.value = me.state;
+    sPhoto = me.photo || null;
+    sColor = { bg: me.bg, fg: me.fg };
+
+    var match = null;
+    sSwatches.forEach(function (sw) {
+      sw.setAttribute('aria-pressed', 'false');
+      if (sw.dataset.bg === me.bg) match = sw;
+    });
+    (match || sSwatches[0]).setAttribute('aria-pressed', 'true');
+    sPaint();
+    if (sPhoto) {
+      var first = match || sSwatches[0];
+      first.textContent = '';
+      first.style.background = 'transparent';
+      var img = new Image(); img.src = sPhoto; img.alt = '';
+      first.appendChild(img);
+    }
+
+    var pick = db.pref('theme', 'dark');
+    [].slice.call(document.querySelectorAll('#theme .opt')).forEach(function (o) {
+      o.setAttribute('aria-pressed', String(o.dataset.theme === pick));
+    });
+
+    $('sNmChk').textContent = '';
+    $('setMsg').textContent = '';
+    $('settings').hidden = false;
+  }
+
+  function closeSettings() {
+    $('settings').hidden = true;
+    applyTheme(db.pref('theme', 'dark'));      // discard an unsaved preview
+  }
+  $('setX').onclick = closeSettings;
+  $('setCancel').onclick = closeSettings;
+  $('settings').onclick = function (e) { if (e.target === $('settings')) closeSettings(); };
+
+  $('setSave').onclick = function () {
+    var name = $('sNm').value.trim();
+    if (!name || !sNameFree) { $('sNm').focus(); sCheckName(); return; }
+    var btn = this;
+    btn.disabled = true;
+    $('setMsg').className = 'chk wait';
+    $('setMsg').textContent = 'Saving…';
+
+    var moved = sSel.value !== me.state;
+    me.name = name;
+    me.city = $('sCty').value.trim();
+    me.state = sSel.value;
+    me.photo = sPhoto;
+    if (sColor) { me.bg = sColor.bg; me.fg = sColor.fg; }
+
+    var chosenTheme = (document.querySelector('#theme .opt[aria-pressed="true"]') || {}).dataset;
+    db.setPref('theme', (chosenTheme && chosenTheme.theme) || 'dark');
+
+    db.saveProfile(me).then(function (saved) {
+      me = saved;
+      btn.disabled = false;
+      $('settings').hidden = true;
+      openRoom(byAbbr(moved ? me.state : room.a));
+    }).catch(function (err) {
+      btn.disabled = false;
+      $('setMsg').className = 'chk no';
+      $('setMsg').textContent = '✕ ' + ((err && err.message) || 'Could not save');
+    });
   };
 
   /* ── the microphone ──────────────────────────────────────────
@@ -810,6 +966,7 @@
 
   window.DB_READY.then(function (store) {
     db = store;
+    applyTheme(db.pref('theme', 'dark'));
     updateBanner();
     return db.init().then(function (profile) { return profile; });
   }).then(function (profile) {

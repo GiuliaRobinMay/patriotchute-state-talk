@@ -93,7 +93,7 @@
             </button>
             <div class="menu" id="meMenu" hidden>
               <div class="mhead" id="meMail"></div>
-              <button type="button" id="mMove">I've moved state</button>
+              <button type="button" id="mSettings">Settings</button>
               <button type="button" id="mOut">Sign out</button>
             </div>
           </div>
@@ -128,6 +128,62 @@
       <aside class="who" id="whoList"></aside>
     </div>
   </section>
+
+  <!-- ── SETTINGS ── -->
+  <div class="sheet" id="settings" hidden>
+    <div class="card" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+      <div class="chead">
+        <h2 id="setTitle">Settings</h2>
+        <button class="x" type="button" id="setX" aria-label="Close">✕</button>
+      </div>
+
+      <div class="cbody">
+        <div class="f">
+          <label for="sNm">Your name</label>
+          <input id="sNm" type="text" maxlength="24">
+          <p class="chk wait" id="sNmChk"></p>
+        </div>
+
+        <div class="f">
+          <label>Your picture</label>
+          <div class="avrow" id="sPick">
+            <span class="av lg pk" role="button" tabindex="0" aria-pressed="true" data-bg="#BF3B2E" data-fg="#FBF8F2">?</span>
+            <span class="av lg pk" role="button" tabindex="0" aria-pressed="false" data-bg="#2E8B7C" data-fg="#03150F">?</span>
+            <span class="av lg pk" role="button" tabindex="0" aria-pressed="false" data-bg="#4A6FA5" data-fg="#F4F1EA">?</span>
+            <span class="av lg pk" role="button" tabindex="0" aria-pressed="false" data-bg="#8E6BA8" data-fg="#F4F1EA">?</span>
+            <button class="btn g" type="button" id="sUpBtn" style="align-self:center;padding:9px 14px;font-size:13px">Upload</button>
+            <input type="file" id="sUpFile" accept="image/*" hidden>
+          </div>
+        </div>
+
+        <div class="two">
+          <div class="f">
+            <label for="sStt">Your state</label>
+            <select id="sStt"></select>
+          </div>
+          <div class="f">
+            <label for="sCty">Nearest city</label>
+            <input id="sCty" type="text" maxlength="30">
+          </div>
+        </div>
+
+        <div class="f">
+          <label>Appearance</label>
+          <div class="seg row" id="theme">
+            <button class="opt" type="button" data-theme="dark" aria-pressed="true"><span class="r"></span><span><b>Dark</b></span></button>
+            <button class="opt" type="button" data-theme="light" aria-pressed="false"><span class="r"></span><span><b>Light</b></span></button>
+            <button class="opt" type="button" data-theme="system" aria-pressed="false"><span class="r"></span><span><b>Match device</b></span></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="cfoot">
+        <p class="chk wait" id="setMsg"></p>
+        <button class="btn g" type="button" id="setCancel">Cancel</button>
+        <button class="btn" type="button" id="setSave">Save changes</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ── ANNOUNCEMENTS (admin) ── -->
   <section class="view" id="vAnn" aria-label="Post an announcement">
