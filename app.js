@@ -385,6 +385,7 @@
     }
 
     if (me) {
+      $('mAdmin').hidden = !me.host;
       $('rsState').textContent = byAbbr(me.state).n;
       $('rsState').setAttribute('aria-selected', String(s.a !== 'US'));
       $('rsUsa').setAttribute('aria-selected', String(s.a === 'US'));
@@ -407,6 +408,9 @@
     stopMessages = db.onMessages(s.a, function (msg) {
       appendMessage(msg);
       $('chat').scrollTop = $('chat').scrollHeight;
+    }, function (goneId) {
+      var el = $('chat').querySelector('[data-id="' + goneId + '"]');
+      if (el) el.remove();
     });
     if (me) {
       stopPresence = db.onPresence(s.a, me, function (people) {
@@ -436,6 +440,7 @@
   /* ── chat ────────────────────────────────────────────────────── */
   function messageEl(m) {
     var wrap = document.createElement('div'); wrap.className = 'm' + (m.mine ? ' mine' : '');
+    if (m.id) wrap.dataset.id = m.id;
     var b = document.createElement('div'); b.className = 'b';
     var h = document.createElement('div'); h.className = 'h';
 
@@ -448,6 +453,20 @@
     }
     var tm = document.createElement('span'); tm.className = 'tm'; tm.textContent = clock(m.ts);
     h.appendChild(tm);
+
+    if (!m.mine && m.id && db.shared) {
+      var rep = document.createElement('button');
+      rep.type = 'button'; rep.className = 'rep';
+      rep.title = 'Report this message to the admins';
+      rep.textContent = '⚑';
+      rep.onclick = function () {
+        if (!confirm('Report this message to the admins?')) return;
+        db.report(m.id).then(function () {
+          rep.textContent = '✓'; rep.disabled = true;
+        }).catch(function () {});
+      };
+      h.appendChild(rep);
+    }
 
     var tx = document.createElement('div'); tx.className = 'tx'; tx.textContent = m.text;
     b.appendChild(h); b.appendChild(tx);
@@ -682,6 +701,7 @@
       all: !picking,
       rooms: Object.keys(chosenRooms),
       starts: starts,
+      repeats: starts ? $('aRepeat').checked : false,
       until: days ? Date.now() + days * 86400000 : 0
     }).then(function () {
       b.textContent = '✓ Pinned to ' + count + ' rooms';
@@ -731,6 +751,11 @@
   document.addEventListener('click', function () { toggleMenu(false); });
   meMenu.onclick = function (e) { e.stopPropagation(); };
   $('mSettings').onclick = function () { toggleMenu(false); openSettings(); };
+  $('mAdmin').onclick = function () {
+    toggleMenu(false);
+    if (location.hash === '#admin') checkHash();
+    else location.hash = '#admin';
+  };
   $('mOut').onclick = function () {
     toggleMenu(false);
     if (!confirm('Sign out and set up again on this device?')) return;
@@ -1020,6 +1045,28 @@
     $('talkMute').hidden = !inCall;
   }
 
+  function loadUpcoming() {
+    if (!db.shared) { $('upWrap').hidden = true; return; }
+    db.upcoming(room.a).then(function (list) {
+      $('upWrap').hidden = !list.length;
+      var box = $('upList');
+      box.textContent = '';
+      list.forEach(function (g) {
+        var row = document.createElement('div');
+        row.className = 'up' + (g.live ? ' live' : '');
+        var wt = document.createElement('span'); wt.className = 'wt';
+        var d = new Date(g.starts);
+        wt.textContent = g.live ? '● NOW' : (g.repeats ? 'every ' : '') +
+          d.toLocaleDateString('en-US', { weekday: g.repeats ? 'long' : 'short', month: g.repeats ? undefined : 'short', day: g.repeats ? undefined : 'numeric' }) +
+          ' · ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        var tt = document.createElement('span'); tt.className = 'tt'; tt.textContent = g.title;
+        var who = document.createElement('span'); who.className = 'who'; who.textContent = 'by ' + g.by;
+        row.appendChild(wt); row.appendChild(tt); row.appendChild(who);
+        box.appendChild(row);
+      });
+    }).catch(function () { $('upWrap').hidden = true; });
+  }
+
   /* Chat ↔ Live Room. Entering the room seats you as a listener, so the
      speakers know they have an audience; leaving stands you back up. */
   function showTalk(open) {
@@ -1035,6 +1082,7 @@
       if (open) window.Voice.listen(room.a, me);
       else if (!inCall) window.Voice.unlisten();
     }
+    if (open) loadUpcoming();
     renderVoice(lastVoiceList);
   }
   $('tabChat').onclick = function () { showTalk(false); };
@@ -1124,13 +1172,133 @@
   $('rsState').onclick = function () { if (me && room.a === 'US') openRoom(byAbbr(me.state)); };
   $('rsUsa').onclick = function () { if (me && room.a !== 'US') openRoom(USA); };
 
-  /* ── host view ───────────────────────────────────────────────── */
+  /* ── the admin zone ──────────────────────────────────────────── */
+  function adminTab(which) {
+    var map = { ann: ['atAnn', 'padAnn'], rep: ['atRep', 'padRep'], mem: ['atMem', 'padMem'] };
+    Object.keys(map).forEach(function (k) {
+      $(map[k][0]).setAttribute('aria-selected', String(k === which));
+      $(map[k][1]).hidden = k !== which;
+    });
+    if (which === 'rep') loadReports();
+    if (which === 'mem') loadMembersAdmin('');
+  }
+  $('atAnn').onclick = function () { adminTab('ann'); };
+  $('atRep').onclick = function () { adminTab('rep'); };
+  $('atMem').onclick = function () { adminTab('mem'); };
+
+  function loadReports() {
+    var pad = $('padRep');
+    pad.textContent = 'Loading…';
+    db.reports().then(function (list) {
+      pad.textContent = '';
+      if (!list.length) {
+        var e = document.createElement('p'); e.className = 'hint';
+        e.textContent = 'Nothing flagged. Quiet is good.';
+        pad.appendChild(e);
+        return;
+      }
+      list.forEach(function (r) {
+        var card = document.createElement('div'); card.className = 'repcard';
+        var hd = document.createElement('div'); hd.className = 'rhd';
+        var cnt = document.createElement('span'); cnt.className = 'cnt';
+        cnt.textContent = '⚑ ' + r.count;
+        var who = document.createElement('b'); who.textContent = r.authorName;
+        hd.appendChild(cnt); hd.appendChild(who);
+        var wh = document.createElement('span');
+        wh.textContent = (r.room ? 'in ' + byAbbr(r.room).n : '') + (r.when ? ' · ' + clock(r.when) : '');
+        hd.appendChild(wh);
+        var bd = document.createElement('div'); bd.className = 'bd'; bd.textContent = r.body;
+        var acts = document.createElement('div'); acts.className = 'acts';
+        var del = document.createElement('button'); del.className = 'btn'; del.type = 'button';
+        del.textContent = 'Remove message';
+        del.onclick = function () {
+          if (!confirm('Remove this message for everyone?')) return;
+          db.removeMessage(r.messageId).then(function () {
+            return db.clearReports(r.reportIds);
+          }).then(loadReports).catch(function (err) { alert((err && err.message) || 'Could not remove'); });
+        };
+        var dis = document.createElement('button'); dis.className = 'btn g'; dis.type = 'button';
+        dis.textContent = 'Dismiss';
+        dis.onclick = function () {
+          db.clearReports(r.reportIds).then(loadReports)
+            .catch(function (err) { alert((err && err.message) || 'Could not dismiss'); });
+        };
+        acts.appendChild(del); acts.appendChild(dis);
+        card.appendChild(hd); card.appendChild(bd); card.appendChild(acts);
+        pad.appendChild(card);
+      });
+    }).catch(function (err) {
+      pad.textContent = 'Could not load reports — ' + ((err && err.message) || 'try again');
+    });
+  }
+
+  var memTimer = null;
+  $('memQ').oninput = function () {
+    clearTimeout(memTimer);
+    var q = this.value.trim();
+    memTimer = setTimeout(function () { loadMembersAdmin(q); }, 400);
+  };
+
+  function loadMembersAdmin(q) {
+    var box = $('memList');
+    box.textContent = 'Loading…';
+    db.membersAll(q).then(function (list) {
+      box.textContent = '';
+      if (!list.length) {
+        var e = document.createElement('p'); e.className = 'hint';
+        e.textContent = q ? 'No member matches that.' : 'No members yet.';
+        box.appendChild(e);
+        return;
+      }
+      list.forEach(function (m2) {
+        var row = document.createElement('div'); row.className = 'memrow';
+        var av = document.createElement('span'); av.className = 'av sm';
+        avatar(av, m2);
+        var t = document.createElement('span'); t.className = 't';
+        var n = document.createElement('span'); n.className = 'n'; n.textContent = m2.name;
+        if (m2.is_host) { var b1 = document.createElement('span'); b1.className = 'tagb adm'; b1.textContent = 'Admin'; n.appendChild(b1); }
+        if (m2.banned)  { var b2 = document.createElement('span'); b2.className = 'tagb ban'; b2.textContent = 'Removed'; n.appendChild(b2); }
+        var dd = document.createElement('span'); dd.className = 'd';
+        dd.textContent = [byAbbr(m2.state).n, m2.city, m2.email].filter(Boolean).join(' · ');
+        t.appendChild(n); t.appendChild(dd);
+        var acts = document.createElement('span'); acts.className = 'acts';
+        if (me && m2.id !== me.id) {
+          var ban = document.createElement('button'); ban.type = 'button';
+          ban.className = m2.banned ? '' : 'warn';
+          ban.textContent = m2.banned ? 'Restore access' : 'Remove from the app';
+          ban.onclick = function () {
+            var q2 = m2.banned
+              ? 'Give ' + m2.name + ' access again?'
+              : 'Remove ' + m2.name + '? They stay signed in but can no longer post anywhere.';
+            if (!confirm(q2)) return;
+            db.setBanned(m2.id, !m2.banned).then(function () { loadMembersAdmin(q || ''); })
+              .catch(function (err) { alert((err && err.message) || 'Could not change that'); });
+          };
+          var adm = document.createElement('button'); adm.type = 'button';
+          adm.textContent = m2.is_host ? 'Take admin away' : 'Make admin';
+          adm.onclick = function () {
+            if (!confirm((m2.is_host ? 'Remove admin from ' : 'Make ') + m2.name + (m2.is_host ? '?' : ' an admin?'))) return;
+            db.setAdmin(m2.id, !m2.is_host).then(function () { loadMembersAdmin(q || ''); })
+              .catch(function (err) { alert((err && err.message) || 'Could not change that'); });
+          };
+          acts.appendChild(ban); acts.appendChild(adm);
+        }
+        row.appendChild(av); row.appendChild(t); row.appendChild(acts);
+        box.appendChild(row);
+      });
+    }).catch(function (err) {
+      box.textContent = 'Could not load members — ' + ((err && err.message) || 'try again');
+    });
+  }
+
   function checkHash() {
-    if (location.hash !== '#announce') return;
-    $('pvWho').textContent = (me && me.name) || 'you';
+    if (location.hash !== '#announce' && location.hash !== '#admin') return;
+    if (!(me && me.host)) return;              // members never see this view
+    $('pvWho').textContent = me.name;
     var d = new Date(Date.now() + 14 * 86400000);
     $('exp14').textContent = 'Clears itself on ' + d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
     tally();
+    adminTab('ann');
     show('vAnn');
   }
   window.addEventListener('hashchange', checkHash);
@@ -1163,6 +1331,20 @@
     }
 
     me = profile;
+
+    if (me && me.banned) {
+      $('app').textContent = '';
+      var dead = document.createElement('div');
+      dead.className = 'pane';
+      var h = document.createElement('h1');
+      h.textContent = 'Your access has been removed.';
+      var pl = document.createElement('p');
+      pl.className = 'lead';
+      pl.textContent = 'An admin removed you from State Rooms. If you believe this is a mistake, contact the community team.';
+      dead.appendChild(h); dead.appendChild(pl);
+      $('app').appendChild(dead);
+      return;
+    }
 
     if (me) {
       $('nm').value = me.name;

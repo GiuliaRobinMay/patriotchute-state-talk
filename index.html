@@ -97,6 +97,7 @@
             </button>
             <div class="menu" id="meMenu" hidden>
               <div class="mhead" id="meMail"></div>
+              <button type="button" id="mAdmin" hidden>Admin zone</button>
               <button type="button" id="mSettings">Settings</button>
               <button type="button" id="mOut">Sign out</button>
             </div>
@@ -134,6 +135,10 @@
           <div>
             <div class="tlab">Listening · <span id="earN">0</span></div>
             <div class="earGrid" id="stageEars"></div>
+          </div>
+          <div id="upWrap" hidden>
+            <div class="tlab">Upcoming gatherings</div>
+            <div class="ups" id="upList"></div>
           </div>
           <div class="talkctl">
             <button class="btn" id="talkJoin">🎙 Join the mic</button>
@@ -211,8 +216,18 @@
   </div>
 
   <!-- ── ANNOUNCEMENTS (admin) ── -->
-  <section class="view" id="vAnn" aria-label="Post an announcement">
-    <div class="ann">
+  <section class="view" id="vAnn" aria-label="Admin zone">
+    <div class="atabs" role="tablist" aria-label="Admin zone">
+      <button type="button" id="atAnn" role="tab" aria-selected="true">📣 Announce</button>
+      <button type="button" id="atRep" role="tab" aria-selected="false">⚑ Reports</button>
+      <button type="button" id="atMem" role="tab" aria-selected="false">👥 Members</button>
+    </div>
+    <div class="adminpad" id="padRep" hidden></div>
+    <div class="adminpad" id="padMem" hidden>
+      <input class="srch" id="memQ" type="search" placeholder="Search members by name…" aria-label="Search members">
+      <div id="memList"></div>
+    </div>
+    <div class="ann" id="padAnn">
       <div class="compose">
         <div style="display:flex;align-items:center;gap:10px">
           <button class="btn g" type="button" id="annBack" style="padding:7px 11px;font-size:13px">&larr;</button>
@@ -232,6 +247,7 @@
         <div class="f">
           <label for="aWhen">Gather moment <span style="text-transform:none;letter-spacing:0">— optional</span></label>
           <input id="aWhen" type="datetime-local">
+          <label class="chkrow"><input type="checkbox" id="aRepeat"> Repeats weekly</label>
           <p class="hint">Set a time and the notice becomes an invitation — each member sees it in their own timezone.</p>
         </div>
         <div class="f">

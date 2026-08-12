@@ -120,6 +120,79 @@ begin
   end if;
 end $$;
 
+-- ── the admin zone ────────────────────────────────────────────────
+
+alter table profiles add column if not exists banned  boolean not null default false;
+alter table notices  add column if not exists repeats boolean not null default false;
+
+-- A member may edit their own row, so without this they could also edit
+-- is_host or banned and promote themselves. Column grants close that door;
+-- admins change those two columns through the functions below instead.
+revoke update on table profiles from authenticated;
+grant update (name, city, state, bg, fg, photo, email, updated_at)
+  on table profiles to authenticated;
+
+-- The banned cannot post; admins may remove anything.
+drop policy if exists "post as yourself" on messages;
+create policy "post as yourself" on messages
+  for insert to authenticated with check (
+    auth.uid() = author
+    and not exists (select 1 from profiles p where p.id = auth.uid() and p.banned)
+  );
+
+drop policy if exists "delete your own message" on messages;
+drop policy if exists "delete own or as admin"  on messages;
+create policy "delete own or as admin" on messages
+  for delete to authenticated using (
+    auth.uid() = author
+    or exists (select 1 from profiles p where p.id = auth.uid() and p.is_host)
+  );
+
+-- ── flagged content ───────────────────────────────────────────────
+create table if not exists reports (
+  id          bigint generated always as identity primary key,
+  message_id  bigint not null references messages on delete cascade,
+  reporter    uuid not null references auth.users on delete cascade,
+  created_at  timestamptz not null default now(),
+  unique (message_id, reporter)          -- one flag per person per message
+);
+
+alter table reports enable row level security;
+
+drop policy if exists "members flag messages" on reports;
+drop policy if exists "admins read flags"     on reports;
+drop policy if exists "admins clear flags"    on reports;
+
+create policy "members flag messages" on reports
+  for insert to authenticated with check (auth.uid() = reporter);
+
+create policy "admins read flags" on reports
+  for select to authenticated using (
+    exists (select 1 from profiles p where p.id = auth.uid() and p.is_host)
+  );
+
+create policy "admins clear flags" on reports
+  for delete to authenticated using (
+    exists (select 1 from profiles p where p.id = auth.uid() and p.is_host)
+  );
+
+-- ── admin actions on the protected columns ────────────────────────
+-- security definer lets these bypass the column grants above; the caller
+-- must themselves be an admin or the update matches no rows.
+create or replace function admin_set_banned(target uuid, value boolean)
+returns void language sql security definer set search_path = public as $$
+  update profiles set banned = value
+  where id = target
+    and exists (select 1 from profiles p where p.id = auth.uid() and p.is_host);
+$$;
+
+create or replace function admin_set_admin(target uuid, value boolean)
+returns void language sql security definer set search_path = public as $$
+  update profiles set is_host = value
+  where id = target
+    and exists (select 1 from profiles p where p.id = auth.uid() and p.is_host);
+$$;
+
 -- ── making yourself a host ────────────────────────────────────────
 -- Join the app first so a profile exists, then run:
 --

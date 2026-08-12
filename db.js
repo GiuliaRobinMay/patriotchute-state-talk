@@ -90,6 +90,15 @@
     setNotice: function (n) { put('notice', n); return Promise.resolve(); },
     clearNotice: function () { put('notice', null); return Promise.resolve(); },
 
+    upcoming: function () { return Promise.resolve([]); },
+    report: function () { return Promise.resolve(); },
+    reports: function () { return Promise.resolve([]); },
+    removeMessage: function () { return Promise.resolve(); },
+    clearReports: function () { return Promise.resolve(); },
+    membersAll: function () { return Promise.resolve([]); },
+    setBanned: function () { return Promise.resolve(); },
+    setAdmin: function () { return Promise.resolve(); },
+
     dismissed: function (id) { return get('dismissed.' + id, false); },
     dismiss: function (id) { put('dismissed.' + id, true); },
     pref: get,
@@ -175,7 +184,7 @@
               return {
                 id: uid, name: p.data.name, city: p.data.city, state: p.data.state,
                 bg: p.data.bg, fg: p.data.fg, photo: p.data.photo,
-                email: p.data.email, host: p.data.is_host
+                email: p.data.email, host: p.data.is_host, banned: p.data.banned
               };
             });
         });
@@ -297,8 +306,13 @@
 
       /* New rows arrive without the author's name attached, so look it up
          once per person and remember it. */
-      onMessages: function (room, cb) {
+      onMessages: function (room, cb, gone) {
         var ch = client.channel('room:' + room)
+          .on('postgres_changes',
+              { event: 'DELETE', schema: 'public', table: 'messages' },
+              function (payload) {
+                if (gone && payload.old && payload.old.id) gone(payload.old.id);
+              })
           .on('postgres_changes',
               { event: 'INSERT', schema: 'public', table: 'messages', filter: 'room=eq.' + room },
               function (payload) {
@@ -378,11 +392,13 @@
           until: n.until ? new Date(n.until).toISOString() : null
         };
         if (n.starts) row.starts_at = new Date(n.starts).toISOString();
+        if (n.repeats) row.repeats = true;
         return client.from('notices').insert(row).then(function (r) {
           /* The gather column arrives by a one-line migration; until it has
              run, pin the notice without the time rather than failing. */
-          if (r.error && row.starts_at && /starts_at/.test(r.error.message)) {
+          if (r.error && /starts_at|repeats/.test(r.error.message || '')) {
             delete row.starts_at;
+            delete row.repeats;
             console.warn('notices.starts_at missing — run the alter in schema.sql');
             return client.from('notices').insert(row).then(function (r2) {
               if (r2.error) throw r2.error;
@@ -394,6 +410,117 @@
 
       clearNotice: function () {
         return client.from('notices').delete().neq('id', -1)
+          .then(function (r) { if (r.error) throw r.error; });
+      },
+
+      /* Upcoming gather moments, next occurrence first. A weekly repeat is
+         rolled forward client-side to its next future occurrence. */
+      upcoming: function (roomAb) {
+        return client.from('notices').select('*')
+          .not('starts_at', 'is', null)
+          .order('starts_at', { ascending: true })
+          .limit(30)
+          .then(function (r) {
+            if (r.error) throw r.error;
+            var now = Date.now(), out = [];
+            (r.data || []).forEach(function (n) {
+              var t = new Date(n.starts_at).getTime();
+              if (n.repeats) { while (t + 3 * 3600000 < now) t += 7 * 86400000; }
+              if (t + 3 * 3600000 < now) return;
+              if (n.rooms.length && n.rooms.indexOf('US') === -1 && n.rooms.indexOf(roomAb) === -1) return;
+              out.push({
+                id: String(n.id), title: n.title, body: n.body, by: n.author_name,
+                starts: t, repeats: !!n.repeats,
+                live: now >= t && now < t + 3 * 3600000
+              });
+            });
+            out.sort(function (a, b) { return a.starts - b.starts; });
+            return out.slice(0, 6);
+          });
+      },
+
+      report: function (messageId) {
+        return client.from('reports').insert({ message_id: messageId, reporter: uid })
+          .then(function (r) {
+            /* 23505 = they already flagged it, which is the same outcome */
+            if (r.error && r.error.code !== '23505') throw r.error;
+          });
+      },
+
+      reports: function () {
+        return client.from('reports')
+          .select('id, message_id, created_at')
+          .order('created_at', { ascending: false })
+          .limit(100)
+          .then(function (r) {
+            if (r.error) throw r.error;
+            var rows = r.data || [];
+            if (!rows.length) return [];
+            var ids = [];
+            rows.forEach(function (x) { if (ids.indexOf(x.message_id) === -1) ids.push(x.message_id); });
+            return client.from('messages')
+              .select('id, room, body, created_at, author')
+              .in('id', ids)
+              .then(function (m) {
+                var msgs = {};
+                (m.data || []).forEach(function (x) { msgs[x.id] = x; });
+                var need = [];
+                (m.data || []).forEach(function (x) { if (need.indexOf(x.author) === -1) need.push(x.author); });
+                var lookup = need.length
+                  ? client.from('profiles').select('id, name, state').in('id', need)
+                  : Promise.resolve({ data: [] });
+                return lookup.then(function (pp) {
+                  var names = {};
+                  (pp.data || []).forEach(function (x) { names[x.id] = x; });
+                  var grouped = {};
+                  rows.forEach(function (rep) {
+                    var g = grouped[rep.message_id] ||
+                      (grouped[rep.message_id] = { count: 0, reportIds: [] });
+                    g.count++;
+                    g.reportIds.push(rep.id);
+                  });
+                  return Object.keys(grouped).map(function (k) {
+                    var g = grouped[k], msg = msgs[k], who = msg && names[msg.author];
+                    return {
+                      messageId: Number(k), count: g.count, reportIds: g.reportIds,
+                      body: msg ? msg.body : '(message already removed)',
+                      room: msg ? msg.room : '',
+                      authorName: who ? who.name : 'unknown',
+                      authorState: who ? who.state : '',
+                      authorId: msg ? msg.author : null,
+                      when: msg ? new Date(msg.created_at).getTime() : 0
+                    };
+                  }).sort(function (a, b) { return b.count - a.count; });
+                });
+              });
+          });
+      },
+
+      removeMessage: function (id) {
+        return client.from('messages').delete().eq('id', id)
+          .then(function (r) { if (r.error) throw r.error; });
+      },
+
+      clearReports: function (reportIds) {
+        return client.from('reports').delete().in('id', reportIds)
+          .then(function (r) { if (r.error) throw r.error; });
+      },
+
+      membersAll: function (q) {
+        var sel = client.from('profiles')
+          .select('id, name, city, state, email, is_host, banned, bg, fg, photo')
+          .order('created_at', { ascending: false })
+          .limit(200);
+        if (q) sel = sel.ilike('name', '%' + q + '%');
+        return sel.then(function (r) { if (r.error) throw r.error; return r.data || []; });
+      },
+
+      setBanned: function (id, b) {
+        return client.rpc('admin_set_banned', { target: id, value: b })
+          .then(function (r) { if (r.error) throw r.error; });
+      },
+      setAdmin: function (id, b) {
+        return client.rpc('admin_set_admin', { target: id, value: b })
           .then(function (r) { if (r.error) throw r.error; });
       },
 
