@@ -44,6 +44,12 @@
     el.textContent = initials(person.name);
   }
 
+  /* What Google handed back, captured before the data layer tidies the URL
+     away. Shown on the sign-in screen when a return trip fails, so the
+     reason is on screen instead of needing to be dug out of the address
+     bar by hand. */
+  var ARRIVED = location.search || '';
+
   /* ── state ───────────────────────────────────────────────────── */
   var framed = true;
   try { framed = window.self !== window.top; } catch (e) { framed = true; }
@@ -237,6 +243,44 @@
       saySigningIn('✕ ' + ((err && err.message) || 'Could not finish sign-in'), 'no');
     });
   });
+
+  /* If we've just come back from Google and still aren't signed in, say what
+     actually arrived rather than silently showing this screen again. */
+  function reportReturn() {
+    var err = /[?&]error/.test(ARRIVED);
+    var code = /[?&]code=/.test(ARRIVED);
+    if (!err && !code) return;
+
+    if (err) {
+      var m = ARRIVED.match(/error_description=([^&]*)/) || ARRIVED.match(/error=([^&]*)/);
+      saySigningIn('✕ Google refused: ' + decodeURIComponent((m ? m[1] : '').replace(/\+/g, ' ')), 'no');
+      return;
+    }
+    /* A code came back but no session came of it. */
+    saySigningIn('✕ Signed in with Google, but the app could not complete it. Details below.', 'no');
+    var box = document.createElement('p');
+    box.className = 'hint';
+    box.style.cssText = 'font-family:var(--mono);font-size:11px;line-height:1.7;margin-top:10px;' +
+      'border-left:2px solid var(--red);padding-left:10px;overflow-wrap:anywhere';
+    box.textContent =
+      'returned with: code' +
+      ' · embedded: ' + (framed ? 'yes' : 'no') +
+      ' · storage: ' + (db.storageWorks() ? 'ok' : 'BLOCKED') +
+      ' · verifier: ' + (hasVerifier() ? 'present' : 'MISSING') +
+      ' · shared: ' + (db.shared ? 'yes' : 'no');
+    $('signinBox').appendChild(box);
+  }
+
+  /* The one-time secret the browser must keep between leaving for Google and
+     coming back. If it's gone, the exchange cannot succeed. */
+  function hasVerifier() {
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        if (/code-verifier/.test(localStorage.key(i))) return true;
+      }
+    } catch (e) {}
+    return false;
+  }
 
   $('anonBtn').onclick = function () {
     saySigningIn('One moment…');
@@ -805,8 +849,7 @@
     } else {
       $('signinBox').hidden = false;
       $('profileBox').hidden = true;
-      var why = db.signInError && db.signInError();
-      if (why) saySigningIn('✕ Google said: ' + why, 'no');
+      reportReturn();
       show('vJoin');
     }
     checkHash();
