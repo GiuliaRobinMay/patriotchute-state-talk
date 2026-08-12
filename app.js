@@ -805,6 +805,8 @@
     } else {
       $('signinBox').hidden = false;
       $('profileBox').hidden = true;
+      var why = db.signInError && db.signInError();
+      if (why) saySigningIn('✕ Google said: ' + why, 'no');
       show('vJoin');
     }
     checkHash();

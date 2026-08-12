@@ -78,6 +78,7 @@
     signInAnonymous: function () { return Promise.resolve(null); },
     tokens: function () { return Promise.resolve(null); },
     adoptTokens: function () { return Promise.resolve(); },
+    signInError: function () { return ''; },
 
     onPresence: function () { return function () {}; },
 
@@ -97,7 +98,49 @@
 
   /* ── shared mode: everyone sees the same room ────────────────── */
   function Shared(client) {
-    var uid = null, authEmail = '', cache = {};
+    var uid = null, authEmail = '', cache = {}, sessionOnce = null;
+
+    /* Google sends people back with a one-time code in the address bar, and
+       supabase-js trades it for a session asynchronously. Asking for the
+       session straight away therefore returns nothing, the app concludes
+       nobody is signed in, and shows the sign-in screen again — which is
+       exactly the loop this avoids. Wait for the library to say it has
+       finished with the URL, and only then look. */
+    function firstSession() {
+      if (sessionOnce) return sessionOnce;
+      sessionOnce = new Promise(function (resolve) {
+        var settled = false;
+        function finish(session) {
+          if (settled) return;
+          settled = true;
+          try { sub.data.subscription.unsubscribe(); } catch (e) {}
+          /* Drop ?code=... so a refresh doesn't try to spend it twice. */
+          if (/[?&](code|error)=/.test(location.search)) {
+            try {
+              history.replaceState({}, '', location.pathname + location.hash);
+            } catch (e) {}
+          }
+          resolve(session || null);
+        }
+        /* When a code is still in the address bar, an empty first event just
+           means the exchange hasn't landed yet — keep waiting for SIGNED_IN
+           rather than concluding nobody is here and bouncing them back to
+           the sign-in screen. */
+        var returning = /[?&]code=/.test(location.search);
+        var sub = client.auth.onAuthStateChange(function (event, session) {
+          if (session) { finish(session); return; }
+          if (event === 'INITIAL_SESSION' && !returning) finish(null);
+        });
+        /* If the event never lands, fall back rather than hanging the app. */
+        setTimeout(function () {
+          if (settled) return;
+          client.auth.getSession().then(function (r) {
+            finish(r.data && r.data.session);
+          }).catch(function () { finish(null); });
+        }, 4000);
+      });
+      return sessionOnce;
+    }
 
     function row2msg(r, who) {
       return {
@@ -123,8 +166,7 @@
          default. Returns the profile, or null when there is no session or no
          profile yet — the app tells those two apart with hasSession(). */
       init: function () {
-        return client.auth.getSession().then(function (r) {
-          var session = r.data && r.data.session;
+        return firstSession().then(function (session) {
           if (!session) { uid = null; return null; }
           uid = session.user.id;
           authEmail = (session.user.email) || '';
@@ -155,6 +197,7 @@
         return client.auth.signInAnonymously().then(function (r) {
           if (r.error) throw r.error;
           uid = r.data.session.user.id;
+          sessionOnce = Promise.resolve(r.data.session);   // replace the cached "nobody"
           return null;
         });
       },
@@ -171,7 +214,15 @@
           if (r.error) throw r.error;
           uid = r.data.session.user.id;
           authEmail = r.data.session.user.email || '';
+          sessionOnce = Promise.resolve(r.data.session);
         });
+      },
+
+      /* Google reports refusals in the address bar rather than by throwing. */
+      signInError: function () {
+        var m = location.search.match(/[?&]error_description=([^&]*)/)
+             || location.search.match(/[?&]error=([^&]*)/);
+        return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : '';
       },
 
       saveProfile: function (p) {
@@ -343,7 +394,13 @@
     if (!configured || !window.supabase) { resolve(Local); return; }
     try {
       var client = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, {
-        auth: { persistSession: true, autoRefreshToken: true, storageKey: KEY + 'auth' }
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,   // required for the Google return trip
+          flowType: 'pkce',
+          storageKey: KEY + 'auth'
+        }
       });
       var shared = Shared(client);
       /* Prove the connection works before handing it to the app. This no
