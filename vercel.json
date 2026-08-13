@@ -1,6 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
+  "redirects": [
+    { "source": "/check.html", "destination": "/", "permanent": true },
+    { "source": "/check", "destination": "/", "permanent": true },
+    { "source": "/app-draft.html", "destination": "/", "permanent": true },
+    { "source": "/state-talk-concept.html", "destination": "/", "permanent": true }
+  ],
   "headers": [
     {
       "source": "/(.*)",
