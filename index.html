@@ -19,8 +19,12 @@
     <button class="x" type="button" id="pbarX" aria-label="Hide this notice">✕</button>
   </div>
 
+  <!-- Shown while the app works out who you are, so the sign-in screen
+       never flashes at people who are already signed in. -->
+  <div class="bootscreen" id="boot"><span class="shield">SR</span></div>
+
   <!-- ── JOIN ── -->
-  <section class="view on" id="vJoin" aria-label="Join">
+  <section class="view" id="vJoin" aria-label="Join">
     <div class="pane">
       <div class="mark"><span class="shield">SR</span><span class="mn">State Rooms<span> &middot; members only</span></span></div>
 

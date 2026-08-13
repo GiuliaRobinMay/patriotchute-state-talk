@@ -67,6 +67,7 @@
   var stopVoiceWatch = function () {};
 
   function show(v) {
+    $('boot').hidden = true;
     ['vJoin', 'vRoom', 'vAnn'].forEach(function (id) {
       $(id).classList.toggle('on', id === v);
     });
@@ -1319,6 +1320,7 @@
     /* This window exists only to complete Google and hand the session back. */
     if (isPopup) {
       document.body.style.background = 'var(--nav)';
+      $('boot').hidden = true;
       if (db.hasSession()) {
         return db.tokens().then(function (t) {
           if (window.opener) {
