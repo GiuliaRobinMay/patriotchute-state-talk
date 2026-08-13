@@ -23,9 +23,10 @@ A separate browser view for admins, running outside the community embed.
 - **Voice at scale**: the current voice test is peer-to-peer (fine for a
   handful of people). If it proves out, move to LiveKit for large rooms,
   stage/hand-raise controls, enforceable mute/kick, and recording.
-- **Member-created talk rooms** (agreed 13 Aug 2026): several parallel
-  Live Rooms per state — anyone can open "New York talk" alongside the
-  main one. Needs LiveKit; one mesh call per room does not scale.
+- **One Live Room per state, by design** (clarified 13 Aug 2026): each
+  state has exactly one talk, plus the All USA talk. Many states may
+  each be live at the same time — already true today — but a state
+  never gets a second parallel room. Do not build member-created rooms.
 - **Hand over ownership**: Google Cloud project + Supabase org transfer to
   the client's accounts; regenerate the Google client secret at handover.
 - **Tidy GitHub**: make `main` the default branch, delete the old
