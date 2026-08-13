@@ -471,3 +471,23 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
   font-size:11.5px;padding:5px 10px;cursor:pointer}
 .annrow .aacts button:hover{color:var(--text);background:var(--panel2)}
 .annrow .aacts button.warn{border-color:var(--mine-line);color:var(--red2)}
+
+
+/* ── gathering cards ─────────────────────────────────────────────── */
+.gcard{display:flex;gap:14px;align-items:center;background:var(--panel);border:1px solid var(--edge);
+  border-radius:12px;padding:13px 15px;flex-wrap:wrap}
+.gdate{width:60px;flex:0 0 auto;text-align:center;background:var(--voice-bg);border-radius:10px;padding:8px 4px}
+.gdate .gm{font-family:var(--mono);font-size:9px;letter-spacing:.12em;color:var(--red2);font-weight:700}
+.gdate .gd{font-family:var(--display);font-size:20px;font-weight:800;color:var(--paper);line-height:1.15;
+  letter-spacing:-.02em}
+.gdate.live{background:rgba(63,160,143,.14)}
+.gdate.live .gm,.gdate.live .gd{color:var(--teal2)}
+.gbody{flex:1;min-width:180px}
+.gbody .gt{font-size:14.5px;font-weight:800;color:var(--text);letter-spacing:-.015em}
+.gbody .gs{font-size:12px;color:var(--faint);margin-top:2px}
+.btn.gjoin{align-self:center;padding:9px 15px;font-size:13px;white-space:nowrap}
+
+/* the host rail knows where things are happening */
+.ri .d.hot{background:var(--teal2);box-shadow:0 0 0 3px rgba(63,160,143,.18)}
+.ri .rmic{margin-left:4px;font-size:10px;animation:p 1.7s infinite}
+.ri.unseen .n{font-weight:800;color:var(--paper)}

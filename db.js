@@ -93,6 +93,8 @@
     upcoming: function () { return Promise.resolve([]); },
     peekRoom: function () { return function () {}; },
     noticesAll: function () { return Promise.resolve([]); },
+    onAnyMessage: function () { return function () {}; },
+    peekVoiceMany: function () { return function () {}; },
     setNoticeDisabled: function () { return Promise.resolve(); },
     deleteNotice: function () { return Promise.resolve(); },
     report: function () { return Promise.resolve(); },
@@ -472,13 +474,45 @@
               if (n.rooms.length && n.rooms.indexOf('US') === -1 && n.rooms.indexOf(roomAb) === -1) return;
               out.push({
                 id: String(n.id), title: n.title, body: n.body, by: n.author_name,
-                starts: t, repeats: !!n.repeats,
+                rooms: n.rooms, starts: t, repeats: !!n.repeats,
                 live: now >= t && now < t + 3 * 3600000
               });
             });
             out.sort(function (a, b) { return a.starts - b.starts; });
             return out.slice(0, 6);
           });
+      },
+
+      /* Admin awareness across every room. One channel carries every
+         message insert; voice needs a presence join per room, so this is
+         host-only and skips the room the host is already in. */
+      onAnyMessage: function (cb) {
+        var ch = client.channel('pulse-msgs')
+          .on('postgres_changes',
+              { event: 'INSERT', schema: 'public', table: 'messages' },
+              function (payload) { cb(payload.new.room, payload.new.author); })
+          .subscribe();
+        return function () { try { client.removeChannel(ch); } catch (e) {} };
+      },
+
+      peekVoiceMany: function (abs, cb) {
+        var chans = abs.map(function (ab) {
+          var vch = client.channel('voice:' + ab, {
+            config: { presence: { key: 'pulse-' + Math.random().toString(36).slice(2, 8) } }
+          });
+          vch.on('presence', { event: 'sync' }, function () {
+            var st = vch.presenceState(), mics = 0;
+            Object.keys(st).forEach(function (k) {
+              var m = (st[k] && st[k][0]) || {};
+              if ((m.role || 'mic') === 'mic') mics++;
+            });
+            cb(ab, mics);
+          }).subscribe();
+          return vch;
+        });
+        return function () {
+          chans.forEach(function (c) { try { client.removeChannel(c); } catch (e) {} });
+        };
       },
 
       noticesAll: function () {

@@ -97,9 +97,36 @@
     pill('rsStateMic', 'rsStateN', stateMics, inUsa && stateAb ? (unread[stateAb] || 0) : 0);
     pill('rsUsaMic', 'rsUsaN', usaMics, !inUsa ? (unread.US || 0) : 0);
 
+    if (me && me.host && railHasMics !== (curMics > 0)) {
+      railHasMics = curMics > 0;
+      drawRail();
+    }
     $('talkLive').hidden = !curMics;
     $('chatN').hidden = !unreadTab;
     if (unreadTab) $('chatN').textContent = unreadTab > 9 ? '9+' : unreadTab;
+  }
+
+  var hotVoice = {}, unseenChat = {};
+  var stopPulseMsg = null, stopPulseVoice = null;
+  var railHasMics = false;
+
+  function startHostPulse() {
+    if (!me || !me.host || !db.shared) return;
+    if (!stopPulseMsg) {
+      stopPulseMsg = db.onAnyMessage(function (ab, author) {
+        if (ab === room.a) return;
+        if (me && author === me.id) return;
+        if (!unseenChat[ab]) { unseenChat[ab] = true; drawRail(); }
+      });
+    }
+    if (stopPulseVoice) stopPulseVoice();
+    var abs = S.map(function (x) { return x.a; }).concat(['US'])
+      .filter(function (ab) { return ab !== room.a; });
+    stopPulseVoice = db.peekVoiceMany(abs, function (ab, mics) {
+      var had = !!hotVoice[ab];
+      hotVoice[ab] = mics;
+      if (had !== (mics > 0)) drawRail();
+    });
   }
 
   function startPeek() {
@@ -382,24 +409,28 @@
   function drawRail() {
     var rail = $('rail');
     rail.textContent = '';
-    var usa = document.createElement('button');
-    usa.type = 'button';
-    usa.className = 'ri' + (room.a === 'US' ? ' cur' : '');
-    usa.textContent = '🇺🇸 All USA';
-    usa.onclick = function () { openRoom(USA); };
-    rail.appendChild(usa);
-    var l = document.createElement('div'); l.className = 'rl'; l.textContent = 'All states';
-    rail.appendChild(l);
-    S.forEach(function (s) {
+    function railItem(label, ab, target) {
       var b = document.createElement('button');
       b.type = 'button';
-      b.className = 'ri' + (s.a === room.a ? ' cur' : '');
-      var d = document.createElement('span'); d.className = 'd';
-      var n = document.createElement('span'); n.className = 'n'; n.textContent = s.n;
+      var cur = ab === room.a;
+      var mics = cur
+        ? lastVoiceList.filter(function (p) { return p.role !== 'listen'; }).length
+        : (hotVoice[ab] || 0);
+      b.className = 'ri' + (cur ? ' cur' : '') + (!cur && unseenChat[ab] ? ' unseen' : '');
+      var d = document.createElement('span'); d.className = 'd' + (mics ? ' hot' : '');
+      var n = document.createElement('span'); n.className = 'n'; n.textContent = label;
       b.appendChild(d); b.appendChild(n);
-      b.onclick = function () { openRoom(s); };
-      rail.appendChild(b);
-    });
+      if (mics) {
+        var mi = document.createElement('span'); mi.className = 'rmic'; mi.textContent = '🎙';
+        b.appendChild(mi);
+      }
+      b.onclick = function () { openRoom(target); };
+      return b;
+    }
+    rail.appendChild(railItem('🇺🇸 All USA', 'US', USA));
+    var l = document.createElement('div'); l.className = 'rl'; l.textContent = 'All states';
+    rail.appendChild(l);
+    S.forEach(function (s) { rail.appendChild(railItem(s.n, s.a, s)); });
   }
 
 
@@ -449,11 +480,13 @@
 
     unread[s.a] = 0;
     unreadTab = 0;
+    unseenChat[s.a] = false;
 
     showTalk(false);
     if (db.shared && window.Voice) stopVoiceWatch = window.Voice.watch(s.a, renderVoice);
     else renderVoice([]);
     startPeek();
+    startHostPulse();
 
     loadChat();
     loadMembers();
@@ -1103,6 +1136,14 @@
     updateSignals();
   }
 
+  /* Where a gathering happens: All USA unless it was pinned to one state. */
+  function gatheringRoom(g) {
+    if (!g.rooms || !g.rooms.length || g.rooms.indexOf('US') > -1) return 'US';
+    var target = g.rooms[0];
+    if (me && !me.host && target !== me.state) return 'US';   // members can't enter other states
+    return target;
+  }
+
   function loadUpcoming() {
     if (!db.shared) { $('upWrap').hidden = true; return; }
     db.upcoming(room.a).then(function (list) {
@@ -1110,17 +1151,47 @@
       var box = $('upList');
       box.textContent = '';
       list.forEach(function (g) {
-        var row = document.createElement('div');
-        row.className = 'up' + (g.live ? ' live' : '');
-        var wt = document.createElement('span'); wt.className = 'wt';
         var d = new Date(g.starts);
-        wt.textContent = g.live ? '● NOW' : (g.repeats ? 'every ' : '') +
-          d.toLocaleDateString('en-US', { weekday: g.repeats ? 'long' : 'short', month: g.repeats ? undefined : 'short', day: g.repeats ? undefined : 'numeric' }) +
-          ' · ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-        var tt = document.createElement('span'); tt.className = 'tt'; tt.textContent = g.title;
-        var who = document.createElement('span'); who.className = 'who'; who.textContent = 'by ' + g.by;
-        row.appendChild(wt); row.appendChild(tt); row.appendChild(who);
-        box.appendChild(row);
+        var card = document.createElement('div');
+        card.className = 'gcard';
+
+        var date = document.createElement('div');
+        date.className = 'gdate' + (g.live ? ' live' : '');
+        var gm = document.createElement('div'); gm.className = 'gm';
+        var gd = document.createElement('div'); gd.className = 'gd';
+        if (g.live) { gm.textContent = 'LIVE'; gd.textContent = 'NOW'; }
+        else if (g.repeats) {
+          gm.textContent = 'EVERY';
+          gd.textContent = d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+        } else {
+          gm.textContent = d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+          gd.textContent = String(d.getDate());
+        }
+        date.appendChild(gm); date.appendChild(gd);
+
+        var body = document.createElement('div'); body.className = 'gbody';
+        var tt = document.createElement('div'); tt.className = 'gt'; tt.textContent = g.title;
+        var sub = document.createElement('div'); sub.className = 'gs';
+        var when = (g.repeats
+          ? 'every ' + d.toLocaleDateString('en-US', { weekday: 'long' })
+          : d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })) +
+          ' · ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + ' your time';
+        var where = gatheringRoom(g) === 'US' ? 'All USA' : byAbbr(gatheringRoom(g)).n;
+        sub.textContent = when + ' · in ' + where + ' · by ' + g.by;
+        body.appendChild(tt); body.appendChild(sub);
+
+        var go = document.createElement('button');
+        go.type = 'button';
+        go.className = g.live ? 'btn gjoin' : 'btn g gjoin';
+        go.textContent = g.live ? '🎙 Join now' : 'Open the room';
+        go.onclick = function () {
+          var target = gatheringRoom(g);
+          if (target !== room.a) openRoom(byAbbr(target));
+          showTalk(true);
+        };
+
+        card.appendChild(date); card.appendChild(body); card.appendChild(go);
+        box.appendChild(card);
       });
     }).catch(function () { $('upWrap').hidden = true; });
   }
