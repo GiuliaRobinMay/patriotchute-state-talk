@@ -22,7 +22,10 @@ A separate browser view for admins, running outside the community embed.
   The `profiles.email` column is filled by Google sign-in for this purpose.
 - **Voice at scale**: the current voice test is peer-to-peer (fine for a
   handful of people). If it proves out, move to LiveKit for large rooms,
-  stage/hand-raise controls, and recording.
+  stage/hand-raise controls, enforceable mute/kick, and recording.
+- **Member-created talk rooms** (agreed 13 Aug 2026): several parallel
+  Live Rooms per state — anyone can open "New York talk" alongside the
+  main one. Needs LiveKit; one mesh call per room does not scale.
 - **Hand over ownership**: Google Cloud project + Supabase org transfer to
   the client's accounts; regenerate the Google client secret at handover.
 - **Tidy GitHub**: make `main` the default branch, delete the old

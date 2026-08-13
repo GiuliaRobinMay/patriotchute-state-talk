@@ -89,8 +89,8 @@
             <span class="meta" id="tCt"></span>
           </div>
           <div class="rswitch" role="tablist" aria-label="Rooms">
-            <button type="button" id="rsState" role="tab" aria-selected="true">Your state</button>
-            <button type="button" id="rsUsa" role="tab" aria-selected="false">🇺🇸 All USA</button>
+            <button type="button" id="rsState" role="tab" aria-selected="true"><span id="rsStateTxt">Your state</span><span class="pmic" id="rsStateMic" hidden>🎙</span><span class="pbadge" id="rsStateN" hidden></span></button>
+            <button type="button" id="rsUsa" role="tab" aria-selected="false"><span id="rsUsaTxt">🇺🇸 All USA</span><span class="pmic" id="rsUsaMic" hidden>🎙</span><span class="pbadge" id="rsUsaN" hidden></span></button>
           </div>
           <div class="menuwrap">
             <button class="mebtn" type="button" id="meBtn2" aria-expanded="false">
@@ -108,8 +108,8 @@
         </div>
 
         <div class="vtabs" role="tablist" aria-label="Chat or Live Room">
-          <button type="button" id="tabChat" role="tab" aria-selected="true">💬 Chat</button>
-          <button type="button" id="tabTalk" role="tab" aria-selected="false">🎙 Live Room</button>
+          <button type="button" id="tabChat" role="tab" aria-selected="true">💬 Chat<span class="pbadge" id="chatN" hidden></span></button>
+          <button type="button" id="tabTalk" role="tab" aria-selected="false">🎙 Live Room<span class="livedot" id="talkLive" hidden></span></button>
         </div>
 
         <div class="notice" id="notice" hidden>

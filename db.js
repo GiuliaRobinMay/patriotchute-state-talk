@@ -91,6 +91,7 @@
     clearNotice: function () { put('notice', null); return Promise.resolve(); },
 
     upcoming: function () { return Promise.resolve([]); },
+    peekRoom: function () { return function () {}; },
     report: function () { return Promise.resolve(); },
     reports: function () { return Promise.resolve([]); },
     removeMessage: function () { return Promise.resolve(); },
@@ -411,6 +412,40 @@
       clearNotice: function () {
         return client.from('notices').delete().neq('id', -1)
           .then(function (r) { if (r.error) throw r.error; });
+      },
+
+      /* A quiet look at a room you are not in — fires on each new message
+         and whenever the number of people on its mic changes. The message
+         listener uses its own topic (postgres_changes doesn't care), but
+         presence is tied to the real topic name, so the voice peek joins
+         'voice:<ab>' without ever tracking itself into it. */
+      peekRoom: function (ab, hooks) {
+        var chans = [];
+        if (hooks.onMsg) {
+          var mch = client.channel('peek-room:' + ab)
+            .on('postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'messages', filter: 'room=eq.' + ab },
+                function () { hooks.onMsg(); })
+            .subscribe();
+          chans.push(mch);
+        }
+        if (hooks.onVoice) {
+          var vch = client.channel('voice:' + ab, {
+            config: { presence: { key: 'peek-' + Math.random().toString(36).slice(2, 8) } }
+          });
+          vch.on('presence', { event: 'sync' }, function () {
+            var st = vch.presenceState(), mics = 0;
+            Object.keys(st).forEach(function (k) {
+              var m = (st[k] && st[k][0]) || {};
+              if ((m.role || 'mic') === 'mic') mics++;
+            });
+            hooks.onVoice(mics);
+          }).subscribe();
+          chans.push(vch);
+        }
+        return function () {
+          chans.forEach(function (c) { try { client.removeChannel(c); } catch (e) {} });
+        };
       },
 
       /* Upcoming gather moments, next occurrence first. A weekly repeat is

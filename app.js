@@ -65,6 +65,46 @@
   var stopMessages = function () {};
   var stopPresence = function () {};
   var stopVoiceWatch = function () {};
+  var stopPeek = function () {};
+  var unread = {};              // room -> messages since you last had it open
+  var otherMics = 0;            // people on the mic in the room you are not in
+  var unreadTab = 0;            // chat messages while the Live Room tab is open
+
+  function otherAb() { return me ? (room.a === 'US' ? me.state : 'US') : null; }
+
+  /* One place decides every badge: the 🎙 on each room pill, the unread
+     count on the room you are not in, and the count on the Chat tab. */
+  function updateSignals() {
+    var curMics = lastVoiceList.filter(function (p) { return p.role !== 'listen'; }).length;
+    var stateAb = me ? me.state : null;
+    var inUsa = room.a === 'US';
+    var stateMics = inUsa ? otherMics : curMics;
+    var usaMics = inUsa ? curMics : otherMics;
+
+    function pill(micId, nId, mics, count) {
+      $(micId).hidden = !mics;
+      $(nId).hidden = !count;
+      if (count) $(nId).textContent = count > 9 ? '9+' : count;
+    }
+    pill('rsStateMic', 'rsStateN', stateMics, inUsa && stateAb ? (unread[stateAb] || 0) : 0);
+    pill('rsUsaMic', 'rsUsaN', usaMics, !inUsa ? (unread.US || 0) : 0);
+
+    $('talkLive').hidden = !curMics;
+    $('chatN').hidden = !unreadTab;
+    if (unreadTab) $('chatN').textContent = unreadTab > 9 ? '9+' : unreadTab;
+  }
+
+  function startPeek() {
+    stopPeek();
+    stopPeek = function () {};
+    var oa = otherAb();
+    otherMics = 0;
+    if (!oa || !db.shared || !me) { updateSignals(); return; }
+    stopPeek = db.peekRoom(oa, {
+      onMsg: function () { unread[oa] = (unread[oa] || 0) + 1; updateSignals(); },
+      onVoice: function (mics) { otherMics = mics; updateSignals(); }
+    });
+  }
 
   function show(v) {
     $('boot').hidden = true;
@@ -387,7 +427,7 @@
 
     if (me) {
       $('mAdmin').hidden = !me.host;
-      $('rsState').textContent = byAbbr(me.state).n;
+      $('rsStateTxt').textContent = byAbbr(me.state).n;
       $('rsState').setAttribute('aria-selected', String(s.a !== 'US'));
       $('rsUsa').setAttribute('aria-selected', String(s.a === 'US'));
     }
@@ -395,12 +435,17 @@
     show('vRoom');
 
     if (inCall) leaveVoice();
+    stopPeek(); stopPeek = function () {};
     stopMessages(); stopPresence(); stopVoiceWatch();
     onlineIds = {};
+
+    unread[s.a] = 0;
+    unreadTab = 0;
 
     showTalk(false);
     if (db.shared && window.Voice) stopVoiceWatch = window.Voice.watch(s.a, renderVoice);
     else renderVoice([]);
+    startPeek();
 
     loadChat();
     loadMembers();
@@ -409,6 +454,7 @@
     stopMessages = db.onMessages(s.a, function (msg) {
       appendMessage(msg);
       $('chat').scrollTop = $('chat').scrollHeight;
+      if (talkOpen) { unreadTab++; updateSignals(); }
     }, function (goneId) {
       var el = $('chat').querySelector('[data-id="' + goneId + '"]');
       if (el) el.remove();
@@ -1044,6 +1090,7 @@
       : (framed && micPermitted() === false ? '🎙 Open a tab to talk' : '🎙 Join the mic');
     $('talkJoin').className = inCall ? 'btn g' : 'btn';
     $('talkMute').hidden = !inCall;
+    updateSignals();
   }
 
   function loadUpcoming() {
@@ -1084,6 +1131,7 @@
       else if (!inCall) window.Voice.unlisten();
     }
     if (open) loadUpcoming();
+    else { unreadTab = 0; }
     renderVoice(lastVoiceList);
   }
   $('tabChat').onclick = function () { showTalk(false); };
