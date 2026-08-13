@@ -447,3 +447,27 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
 .pmic{margin-left:6px;font-size:11px;animation:p 1.7s infinite}
 .livedot{width:7px;height:7px;background:var(--teal2);border-radius:50%;display:inline-block;
   margin-left:6px;animation:p 1.7s infinite;vertical-align:middle}
+
+
+/* admins wear a quiet gold halo, and a star beside their name */
+.av.admring{box-shadow:0 0 0 2px var(--gold)}
+.astar{color:var(--gold);font-size:10px;margin-left:3px;cursor:default}
+
+/* the announcements overview */
+.annlist #annList{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+.annrow{background:var(--panel);border:1px solid var(--edge);border-radius:8px;padding:11px 13px;
+  display:flex;flex-direction:column;gap:6px}
+.annrow.off{opacity:.55}
+.annrow .ahd{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.annrow .ahd b{font-size:13.5px;color:var(--text)}
+.annrow .chipst{font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;
+  border-radius:3px;padding:2px 6px}
+.annrow .chipst.live{background:var(--sagebg,rgba(63,160,143,.15));color:var(--teal2)}
+.annrow .chipst.sched{background:var(--mine-bg);color:var(--red2)}
+.annrow .chipst.off2{background:var(--panel2);color:var(--faint)}
+.annrow .sub2{font-size:11.5px;color:var(--faint)}
+.annrow .aacts{display:flex;gap:6px}
+.annrow .aacts button{background:none;border:1px solid var(--line2);border-radius:6px;color:var(--dim);
+  font-size:11.5px;padding:5px 10px;cursor:pointer}
+.annrow .aacts button:hover{color:var(--text);background:var(--panel2)}
+.annrow .aacts button.warn{border-color:var(--mine-line);color:var(--red2)}

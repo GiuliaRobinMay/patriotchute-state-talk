@@ -92,6 +92,9 @@
 
     upcoming: function () { return Promise.resolve([]); },
     peekRoom: function () { return function () {}; },
+    noticesAll: function () { return Promise.resolve([]); },
+    setNoticeDisabled: function () { return Promise.resolve(); },
+    deleteNotice: function () { return Promise.resolve(); },
     report: function () { return Promise.resolve(); },
     reports: function () { return Promise.resolve([]); },
     removeMessage: function () { return Promise.resolve(); },
@@ -158,6 +161,7 @@
         bg: (who && who.bg) || r.bg,
         fg: (who && who.fg) || r.fg,
         photo: (who && who.photo) || r.photo,
+        admin: !!(who && who.is_host),
         text: r.body,
         mine: r.author === uid,
         ts: new Date(r.created_at).getTime()
@@ -271,7 +275,7 @@
               return rows.map(function (x) { return row2msg(x, cache[x.author]); });
             }
             return client.from('profiles')
-              .select('id, name, city, bg, fg, photo')
+              .select('id, name, city, bg, fg, photo, is_host')
               .in('id', need)
               .then(function (p) {
                 if (!p.error && p.data) {
@@ -320,7 +324,7 @@
                 var r = payload.new;
                 if (r.author === uid) return;          // already on screen
                 if (cache[r.author]) { cb(row2msg(r, cache[r.author])); return; }
-                client.from('profiles').select('name, city, bg, fg, photo')
+                client.from('profiles').select('name, city, bg, fg, photo, is_host')
                   .eq('id', r.author).maybeSingle()
                   .then(function (p) {
                     if (p.data) cache[r.author] = p.data;
@@ -333,7 +337,7 @@
 
       members: function (state, me) {
         return client.from('profiles')
-          .select('id, name, city, bg, fg, photo')
+          .select('id, name, city, bg, fg, photo, is_host')
           .eq('state', state)
           .order('updated_at', { ascending: false })
           .limit(500)
@@ -342,7 +346,8 @@
             return r.data.map(function (p) {
               return {
                 id: p.id, name: p.name, city: p.city, bg: p.bg, fg: p.fg,
-                photo: p.photo, you: p.id === uid, online: p.id === uid
+                photo: p.photo, admin: p.is_host,
+                you: p.id === uid, online: p.id === uid
               };
             });
           });
@@ -355,11 +360,11 @@
           var st = ch.presenceState();
           cb(Object.keys(st).map(function (k) {
             var m = (st[k] && st[k][0]) || {};
-            return { id: k, name: m.name, city: m.city, bg: m.bg, fg: m.fg };
+            return { id: k, name: m.name, city: m.city, bg: m.bg, fg: m.fg, admin: !!m.host };
           }));
         }).subscribe(function (status) {
           if (status === 'SUBSCRIBED') {
-            ch.track({ name: me.name, city: me.city, bg: me.bg, fg: me.fg });
+            ch.track({ name: me.name, city: me.city, bg: me.bg, fg: me.fg, host: !!me.host });
           }
         });
         return function () { client.removeChannel(ch); };
@@ -374,6 +379,7 @@
             if (r.error) throw r.error;
             var now = Date.now();
             var hit = (r.data || []).filter(function (n) {
+              if (n.disabled) return false;
               if (n.until && new Date(n.until).getTime() < now) return false;
               return !n.rooms.length || n.rooms.indexOf(room) > -1;
             })[0];
@@ -459,6 +465,7 @@
             if (r.error) throw r.error;
             var now = Date.now(), out = [];
             (r.data || []).forEach(function (n) {
+              if (n.disabled) return;
               var t = new Date(n.starts_at).getTime();
               if (n.repeats) { while (t + 3 * 3600000 < now) t += 7 * 86400000; }
               if (t + 3 * 3600000 < now) return;
@@ -472,6 +479,35 @@
             out.sort(function (a, b) { return a.starts - b.starts; });
             return out.slice(0, 6);
           });
+      },
+
+      noticesAll: function () {
+        return client.from('notices').select('*')
+          .order('created_at', { ascending: false })
+          .limit(50)
+          .then(function (r) {
+            if (r.error) throw r.error;
+            return (r.data || []).map(function (n) {
+              return {
+                id: n.id, title: n.title, body: n.body, by: n.author_name,
+                all: !n.rooms.length, rooms: n.rooms,
+                until: n.until ? new Date(n.until).getTime() : 0,
+                starts: n.starts_at ? new Date(n.starts_at).getTime() : 0,
+                repeats: !!n.repeats, disabled: !!n.disabled,
+                created: new Date(n.created_at).getTime()
+              };
+            });
+          });
+      },
+
+      setNoticeDisabled: function (id, off) {
+        return client.from('notices').update({ disabled: off }).eq('id', id)
+          .then(function (r) { if (r.error) throw r.error; });
+      },
+
+      deleteNotice: function (id) {
+        return client.from('notices').delete().eq('id', id)
+          .then(function (r) { if (r.error) throw r.error; });
       },
 
       report: function (messageId) {

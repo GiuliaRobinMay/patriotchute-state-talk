@@ -176,6 +176,14 @@ create policy "admins clear flags" on reports
     exists (select 1 from profiles p where p.id = auth.uid() and p.is_host)
   );
 
+alter table notices add column if not exists disabled boolean not null default false;
+
+drop policy if exists "hosts edit notices" on notices;
+create policy "hosts edit notices" on notices
+  for update to authenticated using (
+    exists (select 1 from profiles p where p.id = auth.uid() and p.is_host)
+  );
+
 -- ── admin actions on the protected columns ────────────────────────
 -- security definer lets these bypass the column grants above; the caller
 -- must themselves be an admin or the update matches no rows.

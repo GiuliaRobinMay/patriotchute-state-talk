@@ -32,6 +32,14 @@
   }
   function colorFor(name) { return COLORS[String(name).length % COLORS.length]; }
 
+  function adminStar() {
+    var st = document.createElement('span');
+    st.className = 'astar';
+    st.textContent = '★';
+    st.title = 'Admin';
+    return st;
+  }
+
   function avatar(el, person) {
     el.textContent = '';
     el.style.background = '';
@@ -468,7 +476,8 @@
         if (room.a === 'US') {
           members = people.map(function (p) {
             return { id: p.id, name: p.name || 'Someone', city: p.city,
-                     bg: p.bg, fg: p.fg, online: true, you: me && p.id === me.id };
+                     bg: p.bg, fg: p.fg, admin: p.admin,
+                     online: true, you: me && p.id === me.id };
           });
           markOnline();
           return;
@@ -496,6 +505,7 @@
     if (!m.mine) {
       var who = document.createElement('span'); who.className = 'who'; who.textContent = m.name;
       h.appendChild(who);
+      if (m.admin) h.appendChild(adminStar());
       if (m.city) { var cy = document.createElement('span'); cy.className = 'cy'; cy.textContent = m.city; h.appendChild(cy); }
     }
     var tm = document.createElement('span'); tm.className = 'tm'; tm.textContent = clock(m.ts);
@@ -519,7 +529,7 @@
     b.appendChild(h); b.appendChild(tx);
 
     if (!m.mine) {
-      var av = document.createElement('span'); av.className = 'av sm';
+      var av = document.createElement('span'); av.className = 'av sm' + (m.admin ? ' admring' : '');
       avatar(av, m);
       wrap.appendChild(av);
     }
@@ -583,11 +593,12 @@
     var row = document.createElement('div');
     row.className = 'wp' + (p.online ? '' : ' off');
     if (p.id) row.dataset.id = p.id;
-    var av = document.createElement('span'); av.className = 'av xs';
+    var av = document.createElement('span'); av.className = 'av xs' + (p.admin ? ' admring' : '');
     avatar(av, p);
     var t = document.createElement('span'); t.className = 't';
     var n = document.createElement('span'); n.className = 'n';
     n.textContent = p.name + (p.you ? ' (you)' : '');
+    if (p.admin) n.appendChild(adminStar());
     t.appendChild(n);
     if (p.city) { var c = document.createElement('span'); c.className = 'c'; c.textContent = p.city; t.appendChild(c); }
     row.appendChild(av); row.appendChild(t);
@@ -752,6 +763,7 @@
       until: days ? Date.now() + days * 86400000 : 0
     }).then(function () {
       b.textContent = '✓ Pinned to ' + count + ' rooms';
+      loadAnnList();
       setTimeout(function () {
         b.disabled = false;
         b.textContent = '';
@@ -764,9 +776,6 @@
       b.disabled = false;
       alert('Could not pin that: ' + ((err && err.message) || 'unknown error'));
     });
-  };
-  $('clearBtn').onclick = function () {
-    db.clearNotice().then(function () { alert('Notice taken down.'); });
   };
   $('annBack').onclick = function () { loadNotice(); show('vRoom'); };
 
@@ -1024,7 +1033,7 @@
       var w = document.createElement('span');
       w.className = 'w' + (p.talking ? ' talk' : '');
       var ring = document.createElement('span'); ring.className = 'ring';
-      var av = document.createElement('span'); av.className = 'av sm';
+      var av = document.createElement('span'); av.className = 'av sm' + (p.admin ? ' admring' : '');
       avatar(av, { name: p.name, bg: p.bg, fg: p.fg });
       w.appendChild(ring); w.appendChild(av);
       mics.appendChild(w);
@@ -1056,12 +1065,13 @@
       d.className = 'spk2' + (p.talking ? ' talk' : '');
       var avw = document.createElement('span'); avw.className = 'avw';
       var ring = document.createElement('span'); ring.className = 'ring';
-      var av = document.createElement('span'); av.className = 'av';
+      var av = document.createElement('span'); av.className = 'av' + (p.admin ? ' admring' : '');
       avatar(av, { name: p.name, bg: p.bg, fg: p.fg });
       avw.appendChild(ring); avw.appendChild(av);
       var nm = document.createElement('span'); nm.className = 'nm';
       if (p.you) { var bb = document.createElement('b'); bb.textContent = 'You'; nm.appendChild(bb); }
       else nm.textContent = p.name;
+      if (p.admin) nm.appendChild(adminStar());
       d.appendChild(avw); d.appendChild(nm);
       stage.appendChild(d);
     });
@@ -1078,7 +1088,7 @@
     ears.forEach(function (p) {
       var d = document.createElement('div');
       d.className = 'ear';
-      var av = document.createElement('span'); av.className = 'av';
+      var av = document.createElement('span'); av.className = 'av' + (p.admin ? ' admring' : '');
       avatar(av, { name: p.name, bg: p.bg, fg: p.fg });
       var nm = document.createElement('span'); nm.className = 'nm';
       nm.textContent = p.you ? 'You' : p.name;
@@ -1222,12 +1232,69 @@
   $('rsUsa').onclick = function () { if (me && room.a !== 'US') openRoom(USA); };
 
   /* ── the admin zone ──────────────────────────────────────────── */
+  function loadAnnList() {
+    var box = $('annList');
+    box.textContent = 'Loading…';
+    db.noticesAll().then(function (list) {
+      box.textContent = '';
+      if (!list.length) {
+        var e = document.createElement('p'); e.className = 'hint';
+        e.textContent = 'No announcements yet.';
+        box.appendChild(e);
+        return;
+      }
+      var now = Date.now();
+      list.forEach(function (n) {
+        var row = document.createElement('div');
+        row.className = 'annrow' + (n.disabled ? ' off' : '');
+        var hd = document.createElement('div'); hd.className = 'ahd';
+        var tt = document.createElement('b'); tt.textContent = n.title;
+        hd.appendChild(tt);
+        var chip = document.createElement('span');
+        var expired = n.until && n.until < now;
+        chip.className = 'chipst ' + (n.disabled ? 'off2' : expired ? 'off2' : n.starts && n.starts > now ? 'sched' : 'live');
+        chip.textContent = n.disabled ? 'Off' : expired ? 'Expired' : n.starts && n.starts > now ? 'Scheduled' : 'Live';
+        hd.appendChild(chip);
+        if (n.repeats) {
+          var rc = document.createElement('span');
+          rc.className = 'chipst sched'; rc.textContent = 'Weekly';
+          hd.appendChild(rc);
+        }
+        var sub = document.createElement('div'); sub.className = 'sub2';
+        var bits = ['by ' + n.by, n.all ? 'every room' : n.rooms.length + ' room' + (n.rooms.length === 1 ? '' : 's'),
+          'posted ' + new Date(n.created).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })];
+        if (n.starts) bits.push('🗓 ' + new Date(n.starts).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }));
+        sub.textContent = bits.join(' · ');
+        var acts = document.createElement('div'); acts.className = 'aacts';
+        var tog = document.createElement('button'); tog.type = 'button';
+        tog.textContent = n.disabled ? 'Turn on' : 'Turn off';
+        tog.onclick = function () {
+          db.setNoticeDisabled(n.id, !n.disabled).then(loadAnnList)
+            .catch(function (err) { alert((err && err.message) || 'Could not change that'); });
+        };
+        var del = document.createElement('button'); del.type = 'button'; del.className = 'warn';
+        del.textContent = 'Delete';
+        del.onclick = function () {
+          if (!confirm('Delete “' + n.title + '” for good?')) return;
+          db.deleteNotice(n.id).then(loadAnnList)
+            .catch(function (err) { alert((err && err.message) || 'Could not delete'); });
+        };
+        acts.appendChild(tog); acts.appendChild(del);
+        row.appendChild(hd); row.appendChild(sub); row.appendChild(acts);
+        box.appendChild(row);
+      });
+    }).catch(function (err) {
+      box.textContent = 'Could not load — ' + ((err && err.message) || 'try again');
+    });
+  }
+
   function adminTab(which) {
     var map = { ann: ['atAnn', 'padAnn'], rep: ['atRep', 'padRep'], mem: ['atMem', 'padMem'] };
     Object.keys(map).forEach(function (k) {
       $(map[k][0]).setAttribute('aria-selected', String(k === which));
       $(map[k][1]).hidden = k !== which;
     });
+    if (which === 'ann') loadAnnList();
     if (which === 'rep') loadReports();
     if (which === 'mem') loadMembersAdmin('');
   }
