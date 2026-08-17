@@ -258,17 +258,18 @@
         });
       },
 
-      /* Even if the server call fails, the local session must die — a
-         sign-out that can silently fail is worse than none. */
+      /* The local session dies first and unconditionally — no network call
+         gets a chance to hang inside the embed and leave someone stuck
+         signed in. The server-side revoke is fired without being awaited. */
       signOut: function () {
-        return client.auth.signOut().catch(function () {}).then(function () {
-          try {
-            for (var i = localStorage.length - 1; i >= 0; i--) {
-              var k = localStorage.key(i);
-              if (k && k.indexOf(KEY + 'auth') === 0) localStorage.removeItem(k);
-            }
-          } catch (e) {}
-        });
+        try {
+          for (var i = localStorage.length - 1; i >= 0; i--) {
+            var k = localStorage.key(i);
+            if (k && k.indexOf(KEY + 'auth') === 0) localStorage.removeItem(k);
+          }
+        } catch (e) {}
+        try { client.auth.signOut().catch(function () {}); } catch (e) {}
+        return Promise.resolve();
       },
 
       /* Two queries rather than a join. messages.author points at auth.users,

@@ -8,6 +8,8 @@
 (function () {
   'use strict';
 
+  var BUILD = 'build 31';   // bump on every deploy — shown in the name menu
+
   var S = window.STATES, COLORS = window.AV_COLORS;
   var db = window.DB;
 
@@ -507,7 +509,7 @@
       avatar($('meAv'), me);
       $('meName').textContent = me.name;
       var mail = db.email && db.email();
-      $('meMail').textContent = mail || 'Signed in on this device only';
+      $('meMail').textContent = (mail || 'Signed in on this device only') + ' · ' + BUILD;
     }
 
     if (me) {
@@ -898,7 +900,9 @@
     toggleMenu(false);
     ask('Sign out on this device?').then(function (ok) {
       if (!ok) return;
-      db.signOut().then(function () { me = null; location.reload(); })
+      /* the reload happens even if something above never settles */
+      setTimeout(function () { try { location.reload(); } catch (e) {} }, 1500);
+      db.signOut().then(function () { location.reload(); })
         .catch(function () { location.reload(); });
     });
   };

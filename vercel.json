@@ -2,12 +2,37 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
   "redirects": [
-    { "source": "/check.html", "destination": "/", "permanent": true },
-    { "source": "/check", "destination": "/", "permanent": true },
-    { "source": "/app-draft.html", "destination": "/", "permanent": true },
-    { "source": "/state-talk-concept.html", "destination": "/", "permanent": true }
+    {
+      "source": "/check.html",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/check",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/app-draft.html",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/state-talk-concept.html",
+      "destination": "/",
+      "permanent": true
+    }
   ],
   "headers": [
+    {
+      "source": "/",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    },
     {
       "source": "/(.*)",
       "headers": [
@@ -15,14 +40,28 @@
           "key": "Content-Security-Policy",
           "value": "frame-ancestors 'self' https://patriotchute.com https://*.patriotchute.com https://*.mn.co https://*.mightynetworks.com https://*.tribe.so"
         },
-        { "key": "Permissions-Policy", "value": "microphone=(self), camera=()" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "X-Content-Type-Options", "value": "nosniff" }
+        {
+          "key": "Permissions-Policy",
+          "value": "microphone=(self), camera=()"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
       ]
     },
     {
       "source": "/(.*)\\.(js|css)",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
     }
   ]
 }
