@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 31';   // bump on every deploy — shown in the name menu
+  var BUILD = 'build 32';   // bump on every deploy — shown in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   var db = window.DB;
@@ -366,10 +366,11 @@
     if (e.origin !== location.origin) return;
     var d = e.data;
     if (!d || d.type !== 'stateRooms.session') return;
-    if (!d.tokens) { saySigningIn('✕ Sign-in was cancelled', 'no'); return; }
+    if (!d.tokens) { saySigningIn('✕ ' + (d.reason || 'Sign-in was cancelled'), 'no'); return; }
     saySigningIn('Signed in — one moment…', 'ok');
     db.adoptTokens(d.tokens).then(afterSignIn).catch(function (err) {
-      saySigningIn('✕ ' + ((err && err.message) || 'Could not finish sign-in'), 'no');
+      saySigningIn('✕ ' + ((err && err.message) || 'Could not finish sign-in') +
+        ' — press the Google button to try again', 'no');
     });
   });
 
@@ -410,13 +411,6 @@
     } catch (e) {}
     return false;
   }
-
-  $('anonBtn').onclick = function () {
-    saySigningIn('One moment…');
-    db.signInAnonymous().then(afterSignIn).catch(function (err) {
-      saySigningIn('✕ ' + ((err && err.message) || 'Could not continue'), 'no');
-    });
-  };
 
   $('joinBtn').onclick = function () {
     var name = $('nm').value.trim();
@@ -1567,19 +1561,41 @@
     return db.init().then(function (profile) { return profile; });
   }).then(function (profile) {
 
-    /* This window exists only to complete Google and hand the session back. */
+    /* This window exists only to complete Google and hand the session back.
+       Careful: browsers that partition storage give the embed and this
+       window *different* localStorage, so signing out in the embed leaves
+       an old session lying around here. Reusing it silently signed people
+       back in as whoever they just signed out — so only hand tokens over
+       when Google itself just sent us back, and otherwise wipe whatever is
+       here and ask Google fresh. */
     if (isPopup) {
       document.body.style.background = 'var(--nav)';
       $('boot').hidden = true;
-      if (db.hasSession()) {
-        return db.tokens().then(function (t) {
-          if (window.opener) {
-            window.opener.postMessage({ type: 'stateRooms.session', tokens: t }, location.origin);
-          }
-          window.close();
-        });
+      var cameBack = /[?&#](code|error)=/.test(ARRIVED);
+      if (cameBack) {
+        if (db.hasSession()) {
+          return db.tokens().then(function (t) {
+            if (window.opener) {
+              window.opener.postMessage({ type: 'stateRooms.session', tokens: t }, location.origin);
+            }
+            window.close();
+          });
+        }
+        /* Google answered, but no session came of it. Send the reason to
+           the main window instead of bouncing back to Google forever. */
+        var em = ARRIVED.match(/[?&#]error_description=([^&]*)/) || ARRIVED.match(/[?&#]error=([^&]*)/);
+        if (window.opener) {
+          window.opener.postMessage({
+            type: 'stateRooms.session', tokens: null,
+            reason: em ? decodeURIComponent(em[1].replace(/\+/g, ' ')) : 'Google sign-in did not complete'
+          }, location.origin);
+        }
+        window.close();
+        return;
       }
-      return db.signInWithGoogle(location.origin + location.pathname + '?authpopup=1');
+      return db.signOut().then(function () {
+        return db.signInWithGoogle(location.origin + location.pathname + '?authpopup=1');
+      });
     }
 
     me = profile;

@@ -229,11 +229,22 @@
         });
       },
       adoptTokens: function (t) {
+        function take(session) {
+          uid = session.user.id;
+          authEmail = session.user.email || '';
+          sessionOnce = Promise.resolve(session);
+        }
         return client.auth.setSession(t).then(function (r) {
           if (r.error) throw r.error;
-          uid = r.data.session.user.id;
-          authEmail = r.data.session.user.email || '';
-          sessionOnce = Promise.resolve(r.data.session);
+          take(r.data.session);
+        }).catch(function (err) {
+          /* The library may have picked the session up on its own in the
+             meantime — check before declaring the sign-in failed. */
+          return client.auth.getSession().then(function (r) {
+            var s = r.data && r.data.session;
+            if (!s) throw err;
+            take(s);
+          });
         });
       },
 
@@ -268,7 +279,9 @@
             if (k && k.indexOf(KEY + 'auth') === 0) localStorage.removeItem(k);
           }
         } catch (e) {}
-        try { client.auth.signOut().catch(function () {}); } catch (e) {}
+        /* 'local' keeps the promise the dialog makes: this device only —
+           the same person's phone stays signed in. */
+        try { client.auth.signOut({ scope: 'local' }).catch(function () {}); } catch (e) {}
         return Promise.resolve();
       },
 
