@@ -32,6 +32,52 @@
   }
   function colorFor(name) { return COLORS[String(name).length % COLORS.length]; }
 
+  /* Native confirm()/alert() are silently swallowed inside a sandboxed
+     embed — exactly where this app lives — so decisions and notices are
+     drawn by the app itself. */
+  var askEl = null;
+  function ask(message) {
+    return new Promise(function (resolve) {
+      if (!askEl) {
+        askEl = document.createElement('div');
+        askEl.className = 'sheet';
+        askEl.style.zIndex = '90';
+        var card = document.createElement('div'); card.className = 'card';
+        card.setAttribute('role', 'alertdialog');
+        var body = document.createElement('div'); body.className = 'cbody';
+        var msg = document.createElement('p'); msg.className = 'askmsg';
+        body.appendChild(msg);
+        var foot = document.createElement('div'); foot.className = 'cfoot';
+        var sp = document.createElement('span'); sp.style.flex = '1';
+        var no = document.createElement('button'); no.type = 'button'; no.className = 'btn g'; no.textContent = 'Cancel'; no.dataset.a = 'no';
+        var yes = document.createElement('button'); yes.type = 'button'; yes.className = 'btn'; yes.textContent = 'Yes, do it'; yes.dataset.a = 'yes';
+        foot.appendChild(sp); foot.appendChild(no); foot.appendChild(yes);
+        card.appendChild(body); card.appendChild(foot);
+        askEl.appendChild(card);
+        document.body.appendChild(askEl);
+      }
+      askEl.querySelector('.askmsg').textContent = message;
+      askEl.hidden = false;
+      function done(v) { askEl.hidden = true; resolve(v); }
+      askEl.querySelector('[data-a="no"]').onclick = function () { done(false); };
+      askEl.querySelector('[data-a="yes"]').onclick = function () { done(true); };
+      askEl.onclick = function (e) { if (e.target === askEl) done(false); };
+    });
+  }
+
+  var toastEl = null, toastTimer = null;
+  function toast(message) {
+    if (!toastEl) {
+      toastEl = document.createElement('div');
+      toastEl.className = 'toast';
+      document.body.appendChild(toastEl);
+    }
+    toastEl.textContent = message;
+    toastEl.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('on'); }, 3200);
+  }
+
   function adminStar() {
     var st = document.createElement('span');
     st.className = 'astar';
@@ -202,7 +248,7 @@
   $('upFile').onchange = function (e) {
     var file = e.target.files && e.target.files[0];
     if (!file) return;
-    if (file.size > 1.5 * 1024 * 1024) { alert('That image is over 1.5 MB — please pick a smaller one.'); return; }
+    if (file.size > 1.5 * 1024 * 1024) { toast('That image is over 1.5 MB — please pick a smaller one.'); return; }
     var r = new FileReader();
     r.onload = function () {
       uploaded = r.result;
@@ -550,10 +596,13 @@
       rep.title = 'Report this message to the admins';
       rep.textContent = '⚑';
       rep.onclick = function () {
-        if (!confirm('Report this message to the admins?')) return;
-        db.report(m.id).then(function () {
-          rep.textContent = '✓'; rep.disabled = true;
-        }).catch(function () {});
+        ask('Report this message to the admins?').then(function (ok) {
+          if (!ok) return;
+          db.report(m.id).then(function () {
+            rep.textContent = '✓'; rep.disabled = true;
+            toast('Reported. An admin will take a look.');
+          }).catch(function () {});
+        });
       };
       h.appendChild(rep);
     }
@@ -807,7 +856,7 @@
       }, 2000);
     }).catch(function (err) {
       b.disabled = false;
-      alert('Could not pin that: ' + ((err && err.message) || 'unknown error'));
+      toast('Could not pin that: ' + ((err && err.message) || 'unknown error'));
     });
   };
   $('annBack').onclick = function () { loadNotice(); show('vRoom'); };
@@ -847,8 +896,11 @@
   };
   $('mOut').onclick = function () {
     toggleMenu(false);
-    if (!confirm('Sign out and set up again on this device?')) return;
-    db.signOut().then(function () { me = null; location.reload(); });
+    ask('Sign out on this device?').then(function (ok) {
+      if (!ok) return;
+      db.signOut().then(function () { me = null; location.reload(); })
+        .catch(function () { location.reload(); });
+    });
   };
 
   /* ── appearance ──────────────────────────────────────────────
@@ -904,7 +956,7 @@
   $('sUpFile').onchange = function (e) {
     var file = e.target.files && e.target.files[0];
     if (!file) return;
-    if (file.size > 1.5 * 1024 * 1024) { alert('That image is over 1.5 MB — please pick a smaller one.'); return; }
+    if (file.size > 1.5 * 1024 * 1024) { toast('That image is over 1.5 MB — please pick a smaller one.'); return; }
     var r = new FileReader();
     r.onload = function () {
       sPhoto = r.result;
@@ -1341,14 +1393,16 @@
         tog.textContent = n.disabled ? 'Turn on' : 'Turn off';
         tog.onclick = function () {
           db.setNoticeDisabled(n.id, !n.disabled).then(loadAnnList)
-            .catch(function (err) { alert((err && err.message) || 'Could not change that'); });
+            .catch(function (err) { toast((err && err.message) || 'Could not change that'); });
         };
         var del = document.createElement('button'); del.type = 'button'; del.className = 'warn';
         del.textContent = 'Delete';
         del.onclick = function () {
-          if (!confirm('Delete “' + n.title + '” for good?')) return;
-          db.deleteNotice(n.id).then(loadAnnList)
-            .catch(function (err) { alert((err && err.message) || 'Could not delete'); });
+          ask('Delete “' + n.title + '” for good?').then(function (ok) {
+            if (!ok) return;
+            db.deleteNotice(n.id).then(loadAnnList)
+              .catch(function (err) { toast((err && err.message) || 'Could not delete'); });
+          });
         };
         acts.appendChild(tog); acts.appendChild(del);
         row.appendChild(hd); row.appendChild(sub); row.appendChild(acts);
@@ -1399,16 +1453,18 @@
         var del = document.createElement('button'); del.className = 'btn'; del.type = 'button';
         del.textContent = 'Remove message';
         del.onclick = function () {
-          if (!confirm('Remove this message for everyone?')) return;
-          db.removeMessage(r.messageId).then(function () {
-            return db.clearReports(r.reportIds);
-          }).then(loadReports).catch(function (err) { alert((err && err.message) || 'Could not remove'); });
+          ask('Remove this message for everyone?').then(function (ok) {
+            if (!ok) return;
+            db.removeMessage(r.messageId).then(function () {
+              return db.clearReports(r.reportIds);
+            }).then(loadReports).catch(function (err) { toast((err && err.message) || 'Could not remove'); });
+          });
         };
         var dis = document.createElement('button'); dis.className = 'btn g'; dis.type = 'button';
         dis.textContent = 'Dismiss';
         dis.onclick = function () {
           db.clearReports(r.reportIds).then(loadReports)
-            .catch(function (err) { alert((err && err.message) || 'Could not dismiss'); });
+            .catch(function (err) { toast((err && err.message) || 'Could not dismiss'); });
         };
         acts.appendChild(del); acts.appendChild(dis);
         card.appendChild(hd); card.appendChild(bd); card.appendChild(acts);
@@ -1457,16 +1513,20 @@
             var q2 = m2.banned
               ? 'Give ' + m2.name + ' access again?'
               : 'Remove ' + m2.name + '? They stay signed in but can no longer post anywhere.';
-            if (!confirm(q2)) return;
-            db.setBanned(m2.id, !m2.banned).then(function () { loadMembersAdmin(q || ''); })
-              .catch(function (err) { alert((err && err.message) || 'Could not change that'); });
+            ask(q2).then(function (ok) {
+              if (!ok) return;
+              db.setBanned(m2.id, !m2.banned).then(function () { loadMembersAdmin(q || ''); })
+                .catch(function (err) { toast((err && err.message) || 'Could not change that'); });
+            });
           };
           var adm = document.createElement('button'); adm.type = 'button';
           adm.textContent = m2.is_host ? 'Take admin away' : 'Make admin';
           adm.onclick = function () {
-            if (!confirm((m2.is_host ? 'Remove admin from ' : 'Make ') + m2.name + (m2.is_host ? '?' : ' an admin?'))) return;
-            db.setAdmin(m2.id, !m2.is_host).then(function () { loadMembersAdmin(q || ''); })
-              .catch(function (err) { alert((err && err.message) || 'Could not change that'); });
+            ask((m2.is_host ? 'Remove admin from ' : 'Make ') + m2.name + (m2.is_host ? '?' : ' an admin?')).then(function (ok) {
+              if (!ok) return;
+              db.setAdmin(m2.id, !m2.is_host).then(function () { loadMembersAdmin(q || ''); })
+                .catch(function (err) { toast((err && err.message) || 'Could not change that'); });
+            });
           };
           acts.appendChild(ban); acts.appendChild(adm);
         }

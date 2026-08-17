@@ -203,7 +203,12 @@
       signInWithGoogle: function (redirectTo) {
         return client.auth.signInWithOAuth({
           provider: 'google',
-          options: { redirectTo: redirectTo }
+          options: {
+            redirectTo: redirectTo,
+            /* Always show the account chooser, so signing out really means
+               being able to come back as someone else. */
+            queryParams: { prompt: 'select_account' }
+          }
         }).then(function (r) { if (r.error) throw r.error; });
       },
 
@@ -253,7 +258,18 @@
         });
       },
 
-      signOut: function () { return client.auth.signOut(); },
+      /* Even if the server call fails, the local session must die — a
+         sign-out that can silently fail is worse than none. */
+      signOut: function () {
+        return client.auth.signOut().catch(function () {}).then(function () {
+          try {
+            for (var i = localStorage.length - 1; i >= 0; i--) {
+              var k = localStorage.key(i);
+              if (k && k.indexOf(KEY + 'auth') === 0) localStorage.removeItem(k);
+            }
+          } catch (e) {}
+        });
+      },
 
       /* Two queries rather than a join. messages.author points at auth.users,
          not at profiles, so the database has no relationship to follow and a

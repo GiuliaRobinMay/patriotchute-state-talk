@@ -491,3 +491,12 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
 .ri .d.hot{background:var(--teal2);box-shadow:0 0 0 3px rgba(63,160,143,.18)}
 .ri .rmic{margin-left:4px;font-size:10px;animation:p 1.7s infinite}
 .ri.unseen .n{font-weight:800;color:var(--paper)}
+
+
+/* our own confirm and notices — the native ones never show in the embed */
+.askmsg{font-size:14.5px;color:var(--text);margin:0;line-height:1.5}
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--panel);
+  border:1px solid var(--line2);color:var(--text);padding:10px 16px;border-radius:8px;
+  font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:95;
+  box-shadow:0 10px 30px -10px rgba(0,0,0,.6);max-width:80vw;text-align:center}
+.toast.on{opacity:1}
