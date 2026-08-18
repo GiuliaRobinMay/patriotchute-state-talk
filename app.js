@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 33';   // bump on every deploy — shown in the name menu
+  var BUILD = 'build 34';   // bump on every deploy — shown in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   var db = window.DB;
@@ -1630,7 +1630,7 @@
       if (pairIn) {
         try { sessionStorage.setItem('stateRooms.pair', decodeURIComponent(pairIn)); } catch (e) {}
       }
-      return db.signOut().then(function () {
+      return db.discardSession().then(function () {
         return db.signInWithGoogle(location.origin + location.pathname + '?authpopup=1');
       });
     }

@@ -45,6 +45,7 @@
     saveProfile: function (p) { put('profile', p); return Promise.resolve(p); },
 
     signOut: function () { put('profile', null); return Promise.resolve(); },
+    discardSession: function () { return Promise.resolve(); },
 
     /* Nobody else exists in preview mode, so every message is yours. */
     messages: function (room) {
@@ -317,6 +318,21 @@
         /* 'local' keeps the promise the dialog makes: this device only —
            the same person's phone stays signed in. */
         try { client.auth.signOut({ scope: 'local' }).catch(function () {}); } catch (e) {}
+        return Promise.resolve();
+      },
+
+      /* Wipe this window's stored session without going near the library.
+         Its signOut also sweeps away pending sign-in secrets — in the
+         background, after this call returns — which is exactly wrong right
+         before starting a new sign-in: it was deleting the fresh secret
+         mid-trip and Google's answer could no longer be redeemed. */
+      discardSession: function () {
+        try {
+          for (var i = localStorage.length - 1; i >= 0; i--) {
+            var k = localStorage.key(i);
+            if (k && k.indexOf(KEY + 'auth') === 0) localStorage.removeItem(k);
+          }
+        } catch (e) {}
         return Promise.resolve();
       },
 

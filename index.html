@@ -301,7 +301,10 @@
 <!-- Order matters: config, then the client, then the data layer, then the app.
      `defer` keeps that order while letting the page paint first. If the
      Supabase script fails to load, db.js quietly stays in preview mode. -->
-<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<!-- Pinned on purpose. '@2' means "whatever shipped this week", and a July
+     update quietly changed how the Google return trip addresses this app —
+     sign-in broke without a single line here changing. Never unpin casually. -->
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.9/dist/umd/supabase.js"></script>
 <script defer src="config.js"></script>
 <script defer src="states.js"></script>
 <script defer src="db.js"></script>
