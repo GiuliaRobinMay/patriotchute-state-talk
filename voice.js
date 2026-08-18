@@ -233,6 +233,24 @@
     localCtx = null; localAn = null; localStream = null; localTalking = false;
   }
 
+  /* While on the mic, tell the whole app's shared pulse channel — that is
+     how badges and the host rail see activity without joining this room. */
+  var pulseIv = null;
+  function startMicPulse(ab) {
+    stopMicPulse(null);
+    function beat() {
+      try { if (window.DB && window.DB.micPulse) window.DB.micPulse(ab, myId); } catch (e) {}
+    }
+    beat();
+    pulseIv = setInterval(beat, 4000);
+  }
+  function stopMicPulse(ab) {
+    if (pulseIv) { clearInterval(pulseIv); pulseIv = null; }
+    if (ab) {
+      try { if (window.DB && window.DB.micPulse) window.DB.micPulse(ab, myId, true); } catch (e) {}
+    }
+  }
+
   /* ── public ───────────────────────────────────────────────────── */
   window.Voice = {
 
@@ -278,6 +296,7 @@
       myRole = 'mic';
       if (!ensure(ab)) return;
       announce();
+      startMicPulse(ab);
       startLoop();
     },
 
@@ -287,6 +306,7 @@
       dropAll();
       stopLocalAudio();
       localMeta = null;
+      stopMicPulse(room);
       try { if (chan) chan.untrack(); } catch (e) {}
       emit();
     },

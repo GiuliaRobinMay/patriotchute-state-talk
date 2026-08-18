@@ -98,6 +98,7 @@
     noticesAll: function () { return Promise.resolve([]); },
     onAnyMessage: function () { return function () {}; },
     peekVoiceMany: function () { return function () {}; },
+    micPulse: function () {},
     setNoticeDisabled: function () { return Promise.resolve(); },
     deleteNotice: function () { return Promise.resolve(); },
     report: function () { return Promise.resolve(); },
@@ -117,6 +118,65 @@
   /* ── shared mode: everyone sees the same room ────────────────── */
   function Shared(client) {
     var uid = null, authEmail = '', cache = {}, sessionOnce = null;
+
+    /* The realtime client hands every caller of the same channel name the
+       SAME object, and refuses new listeners once it is subscribed. Two
+       features watching the same room therefore crash the second one —
+       which is exactly what took the whole app down for admins. Rules:
+       a channel that only listens for database changes gets a name nobody
+       else could pick; channels whose name carries meaning (presence,
+       broadcast rooms) get exactly one owner in the whole app. */
+    function uniq(base) {
+      return base + ':' + Math.random().toString(36).slice(2, 8);
+    }
+
+    /* ── the voice pulse ─────────────────────────────────────────
+       Who is on a mic, in any room, without joining every room: every
+       speaker announces itself on ONE shared channel every few seconds,
+       and every window that cares listens on that same channel. This
+       closure is the channel's only owner. */
+    var pulseChan = null, pulseSeen = {}, pulseCbs = [], pulseTick = null;
+
+    function pulseCount(ab) {
+      return Object.keys(pulseSeen[ab] || {}).length;
+    }
+    function pulseNotify(ab) {
+      var n = pulseCount(ab);
+      pulseCbs.slice().forEach(function (f) { f(ab, n); });
+    }
+    function pulseChannel() {
+      if (pulseChan) return pulseChan;
+      pulseChan = client.channel('voice-pulse', { config: { broadcast: { self: true } } });
+      pulseChan.on('broadcast', { event: 'mic' }, function (m) {
+        var p = m.payload || {};
+        if (!p.room || !p.id) return;
+        var seen = pulseSeen[p.room] = pulseSeen[p.room] || {};
+        if (p.off) delete seen[p.id];
+        else seen[p.id] = Date.now();
+        pulseNotify(p.room);
+      });
+      pulseChan.subscribe();
+      /* A speaker that vanishes (closed laptop, lost signal) stops
+         beating; sweep silent entries out so rooms don't stay "live". */
+      pulseTick = setInterval(function () {
+        Object.keys(pulseSeen).forEach(function (ab) {
+          var seen = pulseSeen[ab], cut = Date.now() - 12000, dropped = false;
+          Object.keys(seen).forEach(function (id) {
+            if (seen[id] < cut) { delete seen[id]; dropped = true; }
+          });
+          if (dropped) pulseNotify(ab);
+        });
+      }, 5000);
+      return pulseChan;
+    }
+    function watchPulse(cb) {
+      pulseChannel();
+      pulseCbs.push(cb);
+      return function () {
+        var i = pulseCbs.indexOf(cb);
+        if (i > -1) pulseCbs.splice(i, 1);
+      };
+    }
 
     /* Google sends people back with a one-time code in the address bar, and
        supabase-js trades it for a session asynchronously. Asking for the
@@ -395,7 +455,7 @@
       /* New rows arrive without the author's name attached, so look it up
          once per person and remember it. */
       onMessages: function (room, cb, gone) {
-        var ch = client.channel('room:' + room)
+        var ch = client.channel(uniq('room-' + room))
           .on('postgres_changes',
               { event: 'DELETE', schema: 'public', table: 'messages' },
               function (payload) {
@@ -504,14 +564,13 @@
       },
 
       /* A quiet look at a room you are not in — fires on each new message
-         and whenever the number of people on its mic changes. The message
-         listener uses its own topic (postgres_changes doesn't care), but
-         presence is tied to the real topic name, so the voice peek joins
-         'voice:<ab>' without ever tracking itself into it. */
+         and whenever the number of people on its mic changes. Messages
+         come from a database listener under a name nobody else could
+         pick; mics come from the shared voice pulse. */
       peekRoom: function (ab, hooks) {
-        var chans = [];
+        var chans = [], offPulse = null;
         if (hooks.onMsg) {
-          var mch = client.channel('peek-room:' + ab)
+          var mch = client.channel(uniq('peek-room-' + ab))
             .on('postgres_changes',
                 { event: 'INSERT', schema: 'public', table: 'messages', filter: 'room=eq.' + ab },
                 function () { hooks.onMsg(); })
@@ -519,21 +578,14 @@
           chans.push(mch);
         }
         if (hooks.onVoice) {
-          var vch = client.channel('voice:' + ab, {
-            config: { presence: { key: 'peek-' + Math.random().toString(36).slice(2, 8) } }
+          hooks.onVoice(pulseCount(ab));
+          offPulse = watchPulse(function (room, mics) {
+            if (room === ab) hooks.onVoice(mics);
           });
-          vch.on('presence', { event: 'sync' }, function () {
-            var st = vch.presenceState(), mics = 0;
-            Object.keys(st).forEach(function (k) {
-              var m = (st[k] && st[k][0]) || {};
-              if ((m.role || 'mic') === 'mic') mics++;
-            });
-            hooks.onVoice(mics);
-          }).subscribe();
-          chans.push(vch);
         }
         return function () {
           chans.forEach(function (c) { try { client.removeChannel(c); } catch (e) {} });
+          if (offPulse) offPulse();
         };
       },
 
@@ -568,7 +620,7 @@
          message insert; voice needs a presence join per room, so this is
          host-only and skips the room the host is already in. */
       onAnyMessage: function (cb) {
-        var ch = client.channel('pulse-msgs')
+        var ch = client.channel(uniq('pulse-msgs'))
           .on('postgres_changes',
               { event: 'INSERT', schema: 'public', table: 'messages' },
               function (payload) { cb(payload.new.room, payload.new.author); })
@@ -577,23 +629,18 @@
       },
 
       peekVoiceMany: function (abs, cb) {
-        var chans = abs.map(function (ab) {
-          var vch = client.channel('voice:' + ab, {
-            config: { presence: { key: 'pulse-' + Math.random().toString(36).slice(2, 8) } }
-          });
-          vch.on('presence', { event: 'sync' }, function () {
-            var st = vch.presenceState(), mics = 0;
-            Object.keys(st).forEach(function (k) {
-              var m = (st[k] && st[k][0]) || {};
-              if ((m.role || 'mic') === 'mic') mics++;
-            });
-            cb(ab, mics);
-          }).subscribe();
-          return vch;
+        abs.forEach(function (ab) { cb(ab, pulseCount(ab)); });
+        return watchPulse(function (room, mics) {
+          if (abs.indexOf(room) > -1) cb(room, mics);
         });
-        return function () {
-          chans.forEach(function (c) { try { client.removeChannel(c); } catch (e) {} });
-        };
+      },
+
+      /* Speakers call this every few seconds while their mic is live. */
+      micPulse: function (ab, id, off) {
+        try {
+          pulseChannel().send({ type: 'broadcast', event: 'mic',
+            payload: { room: ab, id: id, off: !!off } });
+        } catch (e) {}
       },
 
       noticesAll: function () {
