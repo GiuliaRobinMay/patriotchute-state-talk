@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 32';   // bump on every deploy — shown in the name menu
+  var BUILD = 'build 33';   // bump on every deploy — shown in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   var db = window.DB;
@@ -311,18 +311,23 @@
 
   /* ── signing in ──────────────────────────────────────────────
      Google will not render its consent screen inside an iframe, so in the
-     embed the button opens a tab, signs in there, and hands the session
-     back by message. Outside a frame it is a plain redirect. */
+     embed the button opens a window, signs in there, and hands the session
+     back. Two roads home: a direct message to the opener, and — because
+     Google's pages sever that opener link mid-trip — a Realtime channel
+     named by a secret the two windows agreed on before leaving. Either
+     road delivering first wins. Outside a frame it is a plain redirect. */
   var authchk = $('authchk');
   var POPUP = 'authpopup';
+  var stopHandoff = null, adopted = false;
 
   function saySigningIn(msg, kind) {
     authchk.className = 'chk ' + (kind || 'wait');
     authchk.textContent = msg;
   }
 
-  function popupUrl() {
-    return location.origin + location.pathname + '?' + POPUP + '=1';
+  function popupUrl(pair) {
+    return location.origin + location.pathname + '?' + POPUP + '=1' +
+      '&pair=' + encodeURIComponent(pair);
   }
 
   function afterSignIn() {
@@ -345,6 +350,20 @@
     $('nm').focus();
   }
 
+  /* One delivery only, whichever road it came by. */
+  function receiveSession(d) {
+    if (adopted) return;
+    if (!d.tokens) { saySigningIn('✕ ' + (d.reason || 'Sign-in was cancelled'), 'no'); return; }
+    adopted = true;
+    if (stopHandoff) { stopHandoff(); stopHandoff = null; }
+    saySigningIn('Signed in — one moment…', 'ok');
+    db.adoptTokens(d.tokens).then(afterSignIn).catch(function (err) {
+      adopted = false;
+      saySigningIn('✕ ' + ((err && err.message) || 'Could not finish sign-in') +
+        ' — press the Google button to try again', 'no');
+    });
+  }
+
   $('googleBtn').onclick = function () {
     saySigningIn('Opening Google…');
     if (!framed) {
@@ -353,7 +372,12 @@
       });
       return;
     }
-    var w = window.open(popupUrl(), 'stateRoomsSignIn', 'width=480,height=680');
+    var pair = 'k' + Math.random().toString(36).slice(2) +
+                     Math.random().toString(36).slice(2);
+    adopted = false;
+    if (stopHandoff) stopHandoff();
+    stopHandoff = db.onHandoff(pair, receiveSession);
+    var w = window.open(popupUrl(pair), 'stateRoomsSignIn', 'width=480,height=680');
     if (!w) {
       saySigningIn('✕ Your browser blocked the sign-in window — allow pop-ups for this site', 'no');
       return;
@@ -361,17 +385,12 @@
     saySigningIn('Waiting for Google in the other window…');
   };
 
-  /* The sign-in tab posts its session here when it is done. */
+  /* The sign-in window posts its session here when the opener link survived. */
   window.addEventListener('message', function (e) {
     if (e.origin !== location.origin) return;
     var d = e.data;
     if (!d || d.type !== 'stateRooms.session') return;
-    if (!d.tokens) { saySigningIn('✕ ' + (d.reason || 'Sign-in was cancelled'), 'no'); return; }
-    saySigningIn('Signed in — one moment…', 'ok');
-    db.adoptTokens(d.tokens).then(afterSignIn).catch(function (err) {
-      saySigningIn('✕ ' + ((err && err.message) || 'Could not finish sign-in') +
-        ' — press the Google button to try again', 'no');
-    });
+    receiveSession({ tokens: d.tokens, reason: d.reason });
   });
 
   /* If we've just come back from Google and still aren't signed in, say what
@@ -1567,31 +1586,49 @@
        an old session lying around here. Reusing it silently signed people
        back in as whoever they just signed out — so only hand tokens over
        when Google itself just sent us back, and otherwise wipe whatever is
-       here and ask Google fresh. */
+       here and ask Google fresh. The pair secret rides in sessionStorage
+       across the Google trip; the opener link does not always survive it,
+       so the session goes home over the Realtime channel as well. */
     if (isPopup) {
       document.body.style.background = 'var(--nav)';
       $('boot').hidden = true;
+      var note = document.createElement('p');
+      note.style.cssText = 'color:#f5efdf;font:15px/1.6 system-ui,sans-serif;' +
+        'padding:48px 28px;text-align:center';
       var cameBack = /[?&#](code|error)=/.test(ARRIVED);
       if (cameBack) {
-        if (db.hasSession()) {
-          return db.tokens().then(function (t) {
-            if (window.opener) {
-              window.opener.postMessage({ type: 'stateRooms.session', tokens: t }, location.origin);
-            }
+        note.textContent = 'Signed in — sending you back to the community…';
+        document.body.appendChild(note);
+        var pairBack = '';
+        try { pairBack = sessionStorage.getItem('stateRooms.pair') || ''; } catch (e) {}
+        var deliver = function (payload) {
+          if (window.opener) {
+            try {
+              window.opener.postMessage({ type: 'stateRooms.session',
+                tokens: payload.tokens, reason: payload.reason }, location.origin);
+            } catch (e) {}
+          }
+          var road = pairBack ? db.sendHandoff(pairBack, payload) : Promise.resolve();
+          return road.then(function () {
+            note.textContent = 'All set — you can close this window.';
             window.close();
           });
+        };
+        if (db.hasSession()) {
+          return db.tokens().then(function (t) { return deliver({ tokens: t }); });
         }
         /* Google answered, but no session came of it. Send the reason to
            the main window instead of bouncing back to Google forever. */
         var em = ARRIVED.match(/[?&#]error_description=([^&]*)/) || ARRIVED.match(/[?&#]error=([^&]*)/);
-        if (window.opener) {
-          window.opener.postMessage({
-            type: 'stateRooms.session', tokens: null,
-            reason: em ? decodeURIComponent(em[1].replace(/\+/g, ' ')) : 'Google sign-in did not complete'
-          }, location.origin);
-        }
-        window.close();
-        return;
+        note.textContent = 'Sign-in did not complete — you can close this window.';
+        return deliver({
+          tokens: null,
+          reason: em ? decodeURIComponent(em[1].replace(/\+/g, ' ')) : 'Google sign-in did not complete'
+        });
+      }
+      var pairIn = (ARRIVED.match(/[?&]pair=([^&]+)/) || [])[1];
+      if (pairIn) {
+        try { sessionStorage.setItem('stateRooms.pair', decodeURIComponent(pairIn)); } catch (e) {}
       }
       return db.signOut().then(function () {
         return db.signInWithGoogle(location.origin + location.pathname + '?authpopup=1');

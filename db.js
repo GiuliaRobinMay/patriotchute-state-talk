@@ -78,6 +78,8 @@
     signInAnonymous: function () { return Promise.resolve(null); },
     tokens: function () { return Promise.resolve(null); },
     adoptTokens: function () { return Promise.resolve(); },
+    onHandoff: function () { return function () {}; },
+    sendHandoff: function () { return Promise.resolve(); },
     signInError: function () { return ''; },
 
     onPresence: function () { return function () {}; },
@@ -245,6 +247,39 @@
             if (!s) throw err;
             take(s);
           });
+        });
+      },
+
+      /* The sign-in window and the embed cannot rely on talking directly:
+         Google's pages sever the window-to-window link mid-trip, and the
+         browser gives the two separate storage. The one thing they always
+         share is the Realtime server, so the finished session travels home
+         over a channel named by a secret only those two windows know. */
+      onHandoff: function (id, cb) {
+        var ch = client.channel('handoff:' + id);
+        ch.on('broadcast', { event: 'session' }, function (m) { cb(m.payload || {}); });
+        ch.subscribe();
+        return function () { try { client.removeChannel(ch); } catch (e) {} };
+      },
+
+      /* Repeat a few times — the embed may still be subscribing. */
+      sendHandoff: function (id, payload) {
+        return new Promise(function (resolve) {
+          var ch = client.channel('handoff:' + id), sent = 0, done = false;
+          function stop() {
+            if (done) return;
+            done = true;
+            try { client.removeChannel(ch); } catch (e) {}
+            resolve();
+          }
+          ch.subscribe(function (status) {
+            if (status !== 'SUBSCRIBED') return;
+            var iv = setInterval(function () {
+              try { ch.send({ type: 'broadcast', event: 'session', payload: payload }); } catch (e) {}
+              if (++sent >= 8) { clearInterval(iv); stop(); }
+            }, 600);
+          });
+          setTimeout(stop, 8000);   // never leave the window hanging
         });
       },
 
