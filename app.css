@@ -28,6 +28,10 @@
   --mine-line:rgba(191,59,46,.34);
   --mine-fg:#E7DAD6;
   --voice-bg:#132340;
+  --green:#46B36B;
+  --green-glow:rgba(70,179,107,.18);
+  --scroll:#26334F;
+  --scroll2:#35466B;
   --display:"Helvetica Neue",Helvetica,"Segoe UI",Roboto,system-ui,Arial,sans-serif;
   --body:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --mono:ui-monospace,"SF Mono","Cascadia Mono",Menlo,Consolas,monospace;
@@ -62,6 +66,10 @@
   --mine-line:#E6BFB4;
   --mine-fg:#3A1D16;
   --voice-bg:#EAF1EE;
+  --green:#2E8B4F;
+  --green-glow:rgba(46,139,79,.16);
+  --scroll:#CFC7B4;
+  --scroll2:#B7AD95;
 }
 
 *{box-sizing:border-box}
@@ -489,6 +497,8 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
 
 /* the host rail knows where things are happening */
 .ri .d.hot{background:var(--teal2);box-shadow:0 0 0 3px rgba(63,160,143,.18)}
+/* people are in there right now — chatting, not talking */
+.ri .d.ppl{background:var(--green);box-shadow:0 0 0 3px var(--green-glow)}
 .ri .rmic{margin-left:4px;font-size:10px;animation:p 1.7s infinite}
 .ri.unseen .n{font-weight:800;color:var(--paper)}
 
@@ -500,3 +510,12 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
   font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:95;
   box-shadow:0 10px 30px -10px rgba(0,0,0,.6);max-width:80vw;text-align:center}
 .toast.on{opacity:1}
+
+/* Thin, quiet scrollbars that follow the theme — the fat grey default
+   bars looked like a wall between the chat and the state list. */
+*{scrollbar-width:thin;scrollbar-color:var(--scroll) transparent}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--scroll2)}
+::-webkit-scrollbar-corner{background:transparent}

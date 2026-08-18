@@ -99,6 +99,8 @@
     onAnyMessage: function () { return function () {}; },
     peekVoiceMany: function () { return function () {}; },
     micPulse: function () {},
+    herePulse: function () {},
+    peekPeopleMany: function () { return function () {}; },
     setNoticeDisabled: function () { return Promise.resolve(); },
     deleteNotice: function () { return Promise.resolve(); },
     report: function () { return Promise.resolve(); },
@@ -136,6 +138,7 @@
        and every window that cares listens on that same channel. This
        closure is the channel's only owner. */
     var pulseChan = null, pulseSeen = {}, pulseCbs = [], pulseTick = null;
+    var hereSeen = {}, hereCbs = [];
 
     function pulseCount(ab) {
       return Object.keys(pulseSeen[ab] || {}).length;
@@ -143,6 +146,14 @@
     function pulseNotify(ab) {
       var n = pulseCount(ab);
       pulseCbs.slice().forEach(function (f) { f(ab, n); });
+    }
+    function hereCount(ab, skipId) {
+      var seen = hereSeen[ab] || {}, n = 0;
+      Object.keys(seen).forEach(function (id) { if (id !== skipId) n++; });
+      return n;
+    }
+    function hereNotify(ab) {
+      hereCbs.slice().forEach(function (e) { e.cb(ab, hereCount(ab, e.skip)); });
     }
     function pulseChannel() {
       if (pulseChan) return pulseChan;
@@ -155,9 +166,20 @@
         else seen[p.id] = Date.now();
         pulseNotify(p.room);
       });
+      /* The same channel also carries a quieter beat: "I have this room
+         open", from every signed-in member, so the host rail can show
+         where people are without joining fifty presence rooms. */
+      pulseChan.on('broadcast', { event: 'here' }, function (m) {
+        var p = m.payload || {};
+        if (!p.room || !p.id) return;
+        var seen = hereSeen[p.room] = hereSeen[p.room] || {};
+        if (p.off) delete seen[p.id];
+        else seen[p.id] = Date.now();
+        hereNotify(p.room);
+      });
       pulseChan.subscribe();
-      /* A speaker that vanishes (closed laptop, lost signal) stops
-         beating; sweep silent entries out so rooms don't stay "live". */
+      /* Anyone who vanishes (closed laptop, lost signal) stops beating;
+         sweep silent entries out so rooms don't stay lit. */
       pulseTick = setInterval(function () {
         Object.keys(pulseSeen).forEach(function (ab) {
           var seen = pulseSeen[ab], cut = Date.now() - 12000, dropped = false;
@@ -165,6 +187,13 @@
             if (seen[id] < cut) { delete seen[id]; dropped = true; }
           });
           if (dropped) pulseNotify(ab);
+        });
+        Object.keys(hereSeen).forEach(function (ab) {
+          var seen = hereSeen[ab], cut = Date.now() - 50000, dropped = false;
+          Object.keys(seen).forEach(function (id) {
+            if (seen[id] < cut) { delete seen[id]; dropped = true; }
+          });
+          if (dropped) hereNotify(ab);
         });
       }, 5000);
       return pulseChan;
@@ -641,6 +670,31 @@
           pulseChannel().send({ type: 'broadcast', event: 'mic',
             payload: { room: ab, id: id, off: !!off } });
         } catch (e) {}
+      },
+
+      /* Every member's app calls this every so often for the room it has
+         open — the "somebody is in there" signal. */
+      herePulse: function (ab, id, off) {
+        try {
+          pulseChannel().send({ type: 'broadcast', event: 'here',
+            payload: { room: ab, id: id, off: !!off } });
+        } catch (e) {}
+      },
+
+      /* How many people have each of these rooms open, not counting
+         yourself. */
+      peekPeopleMany: function (abs, skipId, cb) {
+        pulseChannel();
+        abs.forEach(function (ab) { cb(ab, hereCount(ab, skipId)); });
+        var entry = {
+          skip: skipId,
+          cb: function (ab, n) { if (abs.indexOf(ab) > -1) cb(ab, n); }
+        };
+        hereCbs.push(entry);
+        return function () {
+          var i = hereCbs.indexOf(entry);
+          if (i > -1) hereCbs.splice(i, 1);
+        };
       },
 
       noticesAll: function () {

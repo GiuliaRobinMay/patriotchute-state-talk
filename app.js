@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 37';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 38';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   var db = window.DB;
@@ -154,8 +154,8 @@
     if (unreadTab) $('chatN').textContent = unreadTab > 9 ? '9+' : unreadTab;
   }
 
-  var hotVoice = {}, unseenChat = {};
-  var stopPulseMsg = null, stopPulseVoice = null;
+  var hotVoice = {}, hotPeople = {}, unseenChat = {};
+  var stopPulseMsg = null, stopPulseVoice = null, stopPulsePeople = null;
   var railHasMics = false;
 
   function startHostPulse() {
@@ -168,6 +168,7 @@
       });
     }
     if (stopPulseVoice) stopPulseVoice();
+    if (stopPulsePeople) stopPulsePeople();
     var abs = S.map(function (x) { return x.a; }).concat(['US'])
       .filter(function (ab) { return ab !== room.a; });
     stopPulseVoice = db.peekVoiceMany(abs, function (ab, mics) {
@@ -175,6 +176,26 @@
       hotVoice[ab] = mics;
       if (had !== (mics > 0)) drawRail();
     });
+    stopPulsePeople = db.peekPeopleMany(abs, me.id, function (ab, n) {
+      var had = !!hotPeople[ab];
+      hotPeople[ab] = n;
+      if (had !== (n > 0)) drawRail();
+    });
+  }
+
+  /* Every member's app announces which room it has open, so admins can
+     see life on the rail. Ends by itself when the app closes. */
+  var hereIv = null, hereRoom = null;
+  function startHereBeat() {
+    if (!db.shared || !me) return;
+    if (hereRoom && hereRoom !== room.a) {
+      try { db.herePulse(hereRoom, me.id, true); } catch (e) {}
+    }
+    hereRoom = room.a;
+    if (hereIv) clearInterval(hereIv);
+    var beat = function () { try { db.herePulse(room.a, me.id); } catch (e) {} };
+    beat();
+    hereIv = setInterval(beat, 20000);
   }
 
   function startPeek() {
@@ -495,7 +516,10 @@
         ? lastVoiceList.filter(function (p) { return p.role !== 'listen'; }).length
         : (hotVoice[ab] || 0);
       b.className = 'ri' + (cur ? ' cur' : '') + (!cur && unseenChat[ab] ? ' unseen' : '');
-      var d = document.createElement('span'); d.className = 'd' + (mics ? ' hot' : '');
+      var ppl = !cur && (hotPeople[ab] || 0);
+      var d = document.createElement('span');
+      d.className = 'd' + (mics ? ' hot' : ppl ? ' ppl' : '');
+      if (ppl) d.title = ppl === 1 ? '1 person in there now' : ppl + ' people in there now';
       var n = document.createElement('span'); n.className = 'n'; n.textContent = label;
       b.appendChild(d); b.appendChild(n);
       if (mics) {
@@ -565,6 +589,7 @@
     else renderVoice([]);
     startPeek();
     startHostPulse();
+    startHereBeat();
 
     loadChat();
     loadMembers();
