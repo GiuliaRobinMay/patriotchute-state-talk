@@ -288,7 +288,6 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
 .wp .t{min-width:0}
 .wp .t .n{font-size:12px;color:var(--dim);line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
 .wp .t .c{font-family:var(--mono);font-size:9.5px;color:var(--faint2);display:block}
-.wp .mk{margin-left:auto;font-size:9px;color:var(--teal2)}
 .wp.off .av{opacity:.42}
 .wp.off .t .n{color:var(--faint)}
 

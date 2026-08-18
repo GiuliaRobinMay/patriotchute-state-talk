@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 38';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 39';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   var db = window.DB;
@@ -176,7 +176,10 @@
       hotVoice[ab] = mics;
       if (had !== (mics > 0)) drawRail();
     });
-    stopPulsePeople = db.peekPeopleMany(abs, me.id, function (ab, n) {
+    /* People are watched in every room — the one you're standing in too,
+       so its dot goes green when somebody else is in there with you. */
+    var absAll = S.map(function (x) { return x.a; }).concat(['US']);
+    stopPulsePeople = db.peekPeopleMany(absAll, me.id, function (ab, n) {
       var had = !!hotPeople[ab];
       hotPeople[ab] = n;
       if (had !== (n > 0)) drawRail();
@@ -516,7 +519,7 @@
         ? lastVoiceList.filter(function (p) { return p.role !== 'listen'; }).length
         : (hotVoice[ab] || 0);
       b.className = 'ri' + (cur ? ' cur' : '') + (!cur && unseenChat[ab] ? ' unseen' : '');
-      var ppl = !cur && (hotPeople[ab] || 0);
+      var ppl = hotPeople[ab] || 0;
       var d = document.createElement('span');
       d.className = 'd' + (mics ? ' hot' : ppl ? ' ppl' : '');
       if (ppl) d.title = ppl === 1 ? '1 person in there now' : ppl + ' people in there now';
@@ -741,9 +744,7 @@
     t.appendChild(n);
     if (p.city) { var c = document.createElement('span'); c.className = 'c'; c.textContent = p.city; t.appendChild(c); }
     row.appendChild(av); row.appendChild(t);
-    var d = document.createElement('span'); d.className = 'mk'; d.textContent = '●';
-    if (!p.online) d.style.visibility = 'hidden';
-    row.appendChild(d);
+    /* No dot here: the 'Online' heading above already says who is online. */
     return row;
   }
 
