@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 39';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 40';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   var db = window.DB;
@@ -633,6 +633,31 @@
   }
 
   /* ── chat ────────────────────────────────────────────────────── */
+  /* Message text stays plain text — nobody can inject anything into the
+     room — but pieces that look like web addresses become real links.
+     Only http(s) and www. shapes qualify, and they open in a new tab. */
+  function linkify(el, text) {
+    var re = /(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+\.[^\s<>"']{2,})/g;
+    var last = 0, m2;
+    while ((m2 = re.exec(text)) !== null) {
+      if (m2.index > last) el.appendChild(document.createTextNode(text.slice(last, m2.index)));
+      var raw = m2[0];
+      /* A sentence's closing punctuation is not part of the address. */
+      var trimmed = raw.replace(/[.,;:!?)\]]+$/, '');
+      var a = document.createElement('a');
+      a.href = /^https?:\/\//i.test(trimmed) ? trimmed : 'https://' + trimmed;
+      a.textContent = trimmed;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      el.appendChild(a);
+      if (trimmed.length < raw.length) {
+        el.appendChild(document.createTextNode(raw.slice(trimmed.length)));
+      }
+      last = m2.index + raw.length;
+    }
+    if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
+  }
+
   function messageEl(m) {
     var wrap = document.createElement('div'); wrap.className = 'm' + (m.mine ? ' mine' : '');
     if (m.id) wrap.dataset.id = m.id;
@@ -667,7 +692,7 @@
       h.appendChild(rep);
     }
 
-    var tx = document.createElement('div'); tx.className = 'tx'; tx.textContent = m.text;
+    var tx = document.createElement('div'); tx.className = 'tx'; linkify(tx, m.text);
     b.appendChild(h); b.appendChild(tx);
 
     if (!m.mine) {

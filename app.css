@@ -502,6 +502,10 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
 .ri.unseen .n{font-weight:800;color:var(--paper)}
 
 
+/* links people paste into the chat */
+.tx a{color:var(--teal2);text-decoration:underline;text-underline-offset:2px;overflow-wrap:anywhere}
+.tx a:hover{filter:brightness(1.15)}
+
 /* our own confirm and notices — the native ones never show in the embed */
 .askmsg{font-size:14.5px;color:var(--text);margin:0;line-height:1.5}
 .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--panel);
