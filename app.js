@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 34';   // bump on every deploy — shown in the name menu
+  var BUILD = 'build 35';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   var db = window.DB;
@@ -311,13 +311,14 @@
 
   /* ── signing in ──────────────────────────────────────────────
      Google will not render its consent screen inside an iframe, so in the
-     embed the button opens a window, signs in there, and hands the session
-     back. Two roads home: a direct message to the opener, and — because
-     Google's pages sever that opener link mid-trip — a Realtime channel
-     named by a secret the two windows agreed on before leaving. Either
-     road delivering first wins. Outside a frame it is a plain redirect. */
+     embed the button opens the app in its own tab and the whole sign-in
+     happens there, in plain sight — the ordinary full-page flow, the one
+     path that has always worked. The tab then sends the finished session
+     back over a Realtime channel named by a secret the two windows agreed
+     on beforehand (nothing else survives between them: Google severs the
+     window-to-window link and the browser separates their storage).
+     Outside a frame the button is a plain redirect. */
   var authchk = $('authchk');
-  var POPUP = 'authpopup';
   var stopHandoff = null, adopted = false;
 
   function saySigningIn(msg, kind) {
@@ -325,10 +326,27 @@
     authchk.textContent = msg;
   }
 
-  function popupUrl(pair) {
-    return location.origin + location.pathname + '?' + POPUP + '=1' +
-      '&pair=' + encodeURIComponent(pair);
+  /* "Nothing happens" is the worst possible error message. Anything that
+     breaks shows itself on the sign-in screen instead — and if the app is
+     stuck on the boot screen, the error un-sticks it first. */
+  function surfaceError(msg) {
+    try {
+      if (!$('boot').hidden) {
+        $('boot').hidden = true;
+        $('signinBox').hidden = false;
+        $('buildTag').textContent = BUILD;
+        show('vJoin');
+      }
+      if (!$('signinBox').hidden) saySigningIn('✕ App error: ' + msg, 'no');
+    } catch (x) {}
   }
+  window.addEventListener('error', function (e) {
+    surfaceError(e.message || 'unknown');
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e.reason;
+    surfaceError((r && r.message) || String(r || 'unknown'));
+  });
 
   function afterSignIn() {
     return db.init().then(function (profile) {
@@ -350,7 +368,7 @@
     $('nm').focus();
   }
 
-  /* One delivery only, whichever road it came by. */
+  /* The session arriving from the sign-in tab. Adopt it exactly once. */
   function receiveSession(d) {
     if (adopted) return;
     if (!d.tokens) { saySigningIn('✕ ' + (d.reason || 'Sign-in was cancelled'), 'no'); return; }
@@ -365,11 +383,15 @@
   }
 
   $('googleBtn').onclick = function () {
-    saySigningIn('Opening Google…');
     if (!framed) {
+      saySigningIn('Opening Google…');
       db.signInWithGoogle(location.origin + location.pathname).catch(function (err) {
         saySigningIn('✕ ' + ((err && err.message) || 'Could not start sign-in'), 'no');
       });
+      return;
+    }
+    if (!db.shared) {
+      saySigningIn('✕ Could not reach the database from here — reload and try again', 'no');
       return;
     }
     var pair = 'k' + Math.random().toString(36).slice(2) +
@@ -377,21 +399,13 @@
     adopted = false;
     if (stopHandoff) stopHandoff();
     stopHandoff = db.onHandoff(pair, receiveSession);
-    var w = window.open(popupUrl(pair), 'stateRoomsSignIn', 'width=480,height=680');
+    var w = window.open(location.origin + location.pathname + '?link=' + encodeURIComponent(pair));
     if (!w) {
-      saySigningIn('✕ Your browser blocked the sign-in window — allow pop-ups for this site', 'no');
+      saySigningIn('✕ Your browser blocked the sign-in tab — allow pop-ups for this site', 'no');
       return;
     }
-    saySigningIn('Waiting for Google in the other window…');
+    saySigningIn('Finish signing in, in the tab that just opened — this page follows by itself.');
   };
-
-  /* The sign-in window posts its session here when the opener link survived. */
-  window.addEventListener('message', function (e) {
-    if (e.origin !== location.origin) return;
-    var d = e.data;
-    if (!d || d.type !== 'stateRooms.session') return;
-    receiveSession({ tokens: d.tokens, reason: d.reason });
-  });
 
   /* If we've just come back from Google and still aren't signed in, say what
      actually arrived rather than silently showing this screen again. */
@@ -1571,68 +1585,94 @@
   var wantVoice = (location.search.match(/[?&]voice=([A-Z]{2})/) || [])[1];
   if (wantVoice && wantVoice !== 'US' && !window.STATES.some(function (x) { return x.a === wantVoice; })) wantVoice = null;
 
-  var isPopup = /[?&]authpopup=1/.test(location.search);
+  /* Opened from the community to sign in: remember the secret and clean the
+     address bar so the Google round trip sees the plain app URL. */
+  var linkIn = (ARRIVED.match(/[?&]link=([^&]+)/) || [])[1];
+  if (linkIn) {
+    try { sessionStorage.setItem('stateRooms.pair', decodeURIComponent(linkIn)); } catch (e) {}
+    try { history.replaceState({}, '', location.pathname); } catch (e) {}
+  }
+  function stashedPair() {
+    try { return sessionStorage.getItem('stateRooms.pair') || ''; } catch (e) { return ''; }
+  }
+  function clearPair() {
+    try { sessionStorage.removeItem('stateRooms.pair'); } catch (e) {}
+  }
 
-  window.DB_READY.then(function (store) {
+  /* A full screen the sign-in tab can talk through — everything this tab
+     does must be visible, because its whole job is to replace a silent
+     popup that left people staring at nothing. */
+  function tabScreen(title, lead) {
+    $('app').textContent = '';
+    var pane = document.createElement('div');
+    pane.className = 'pane';
+    var h = document.createElement('h1');
+    h.textContent = title;
+    var pl = document.createElement('p');
+    pl.className = 'lead';
+    pl.textContent = lead;
+    pane.appendChild(h); pane.appendChild(pl);
+    $('app').appendChild(pane);
+    return pane;
+  }
+
+  function tabButton(pane, label, kind, fn) {
+    var b = document.createElement('button');
+    b.className = 'btn' + (kind ? ' ' + kind : '');
+    b.type = 'button';
+    b.style.marginTop = '18px';
+    b.textContent = label;
+    b.onclick = fn;
+    pane.appendChild(b);
+    return b;
+  }
+
+  /* Send the session home to the community page and say so. The sending
+     repeats quietly for a few seconds; the person doesn't wait for it. */
+  function handBack(pair) {
+    tabScreen('You’re signed in. ✓',
+      'Go back to the community tab — the app there lets you in by itself. You can close this tab.');
+    return db.tokens().then(function (t) {
+      return db.sendHandoff(pair, { tokens: t });
+    }).then(clearPair).catch(function (err) {
+      tabScreen('Nearly there',
+        'You are signed in, but this tab could not tell the community page (' +
+        ((err && err.message) || 'connection issue') +
+        '). Go back to the community tab and press the Google button once more.');
+    });
+  }
+
+  var ready = window.DB_READY || Promise.reject(new Error('the data layer failed to load'));
+  ready.then(function (store) {
     db = store;
     applyTheme(db.pref('theme', 'dark'));
     updateBanner();
     return db.init().then(function (profile) { return profile; });
   }).then(function (profile) {
 
-    /* This window exists only to complete Google and hand the session back.
-       Careful: browsers that partition storage give the embed and this
-       window *different* localStorage, so signing out in the embed leaves
-       an old session lying around here. Reusing it silently signed people
-       back in as whoever they just signed out — so only hand tokens over
-       when Google itself just sent us back, and otherwise wipe whatever is
-       here and ask Google fresh. The pair secret rides in sessionStorage
-       across the Google trip; the opener link does not always survive it,
-       so the session goes home over the Realtime channel as well. */
-    if (isPopup) {
-      document.body.style.background = 'var(--nav)';
+    /* This tab was opened from the community (or is returning from Google
+       on that errand): its job is signing in, not opening the room. */
+    var pair = stashedPair();
+    if (pair && db.shared) {
       $('boot').hidden = true;
-      var note = document.createElement('p');
-      note.style.cssText = 'color:#f5efdf;font:15px/1.6 system-ui,sans-serif;' +
-        'padding:48px 28px;text-align:center';
-      var cameBack = /[?&#](code|error)=/.test(ARRIVED);
-      if (cameBack) {
-        note.textContent = 'Signed in — sending you back to the community…';
-        document.body.appendChild(note);
-        var pairBack = '';
-        try { pairBack = sessionStorage.getItem('stateRooms.pair') || ''; } catch (e) {}
-        var deliver = function (payload) {
-          if (window.opener) {
-            try {
-              window.opener.postMessage({ type: 'stateRooms.session',
-                tokens: payload.tokens, reason: payload.reason }, location.origin);
-            } catch (e) {}
-          }
-          var road = pairBack ? db.sendHandoff(pairBack, payload) : Promise.resolve();
-          return road.then(function () {
-            note.textContent = 'All set — you can close this window.';
-            window.close();
-          });
-        };
-        if (db.hasSession()) {
-          return db.tokens().then(function (t) { return deliver({ tokens: t }); });
+      if (db.hasSession()) {
+        if (/[?&#]code=/.test(ARRIVED)) {
+          /* Fresh from Google — the account was chosen seconds ago. */
+          return handBack(pair);
         }
-        /* Google answered, but no session came of it. Send the reason to
-           the main window instead of bouncing back to Google forever. */
-        var em = ARRIVED.match(/[?&#]error_description=([^&]*)/) || ARRIVED.match(/[?&#]error=([^&]*)/);
-        note.textContent = 'Sign-in did not complete — you can close this window.';
-        return deliver({
-          tokens: null,
-          reason: em ? decodeURIComponent(em[1].replace(/\+/g, ' ')) : 'Google sign-in did not complete'
+        /* A session this tab already had. Never assume it's the right
+           person — signing out in the community doesn't reach this tab. */
+        var mail = (db.email && db.email()) || 'an earlier account';
+        var pane = tabScreen('Use this account?',
+          'This browser is already signed in as ' + mail + '.');
+        tabButton(pane, 'Yes — continue as ' + mail, 'google', function () { handBack(pair); });
+        tabButton(pane, 'No — sign in with a different account', '', function () {
+          db.discardSession().then(function () { location.reload(); });
         });
+        return;
       }
-      var pairIn = (ARRIVED.match(/[?&]pair=([^&]+)/) || [])[1];
-      if (pairIn) {
-        try { sessionStorage.setItem('stateRooms.pair', decodeURIComponent(pairIn)); } catch (e) {}
-      }
-      return db.discardSession().then(function () {
-        return db.signInWithGoogle(location.origin + location.pathname + '?authpopup=1');
-      });
+      /* Not signed in here: fall through to the ordinary sign-in screen.
+         The secret stays stashed for after the Google round trip. */
     }
 
     me = profile;
@@ -1651,7 +1691,13 @@
       return;
     }
 
-    if (me) {
+    /* On the real site, a broken data layer must never quietly become
+       "preview mode" — that turns into a button that does nothing. Show
+       the sign-in screen with the reason written on it instead. */
+    var configured = !!(window.CONFIG && window.CONFIG.SUPABASE_URL);
+    var healthy = db.shared || !configured;
+
+    if (me && healthy) {
       $('nm').value = me.name;
       $('cty').value = me.city || '';
       sel.value = me.state;
@@ -1661,17 +1707,31 @@
         showTalk(true);
         joinVoice().catch(function () { leaveVoice(); });
       }
-    } else if (db.hasSession()) {
+    } else if (db.hasSession() && healthy) {
       showProfileStep();          // signed in, but we don't know them yet
     } else {
       $('signinBox').hidden = false;
       $('profileBox').hidden = true;
+      $('buildTag').textContent = BUILD;
+      /* Say the most useful true thing about why sign-in might not work,
+         rather than leaving a button that does nothing. */
+      if (!window.supabase) {
+        saySigningIn('✕ The sign-in part of the app did not load — check your internet and reload this page', 'no');
+      } else if (!db.shared) {
+        saySigningIn('✕ Could not reach the database from this page', 'no');
+      } else if (window.__errs && window.__errs.length) {
+        saySigningIn('✕ App error: ' + window.__errs[0], 'no');
+      }
       reportReturn();
       show('vJoin');
     }
     checkHash();
   }).catch(function (err) {
     console.error('Could not start:', err);
+    $('boot').hidden = true;
+    $('signinBox').hidden = false;
+    $('buildTag').textContent = BUILD;
     show('vJoin');
+    saySigningIn('✕ The app could not start: ' + ((err && err.message) || 'unknown error'), 'no');
   });
 })();

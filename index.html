@@ -1,6 +1,15 @@
 <!doctype html>
 <html lang="en">
 <head>
+<script>
+/* Catch failures from the very first moment, before the app itself is
+   running — a script that fails to load or parse must end up as words on
+   the screen, never as a button that silently does nothing. */
+window.__errs = [];
+addEventListener('error', function (e) {
+  window.__errs.push(e.message || 'a part of the app failed to load');
+}, true);
+</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="dark">
@@ -37,6 +46,7 @@
           Continue with Google
         </button>
         <p class="chk wait" id="authchk" style="margin-top:12px"></p>
+        <p class="hint" id="buildTag" style="margin-top:16px;opacity:.55"></p>
       </div>
 
       <!-- Step 2: how the room should know you -->
