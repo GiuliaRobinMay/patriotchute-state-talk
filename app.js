@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 36';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 37';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   var db = window.DB;
@@ -399,12 +399,15 @@
     adopted = false;
     if (stopHandoff) stopHandoff();
     stopHandoff = db.onHandoff(pair, receiveSession);
-    var w = window.open(location.origin + location.pathname + '?link=' + encodeURIComponent(pair));
+    /* A small window floating over the community — the community itself
+       stays right where it is, visible behind it. */
+    var w = window.open(location.origin + location.pathname + '?link=' + encodeURIComponent(pair),
+      'stateRoomsSignIn', 'width=480,height=720');
     if (!w) {
-      saySigningIn('✕ Your browser blocked the sign-in tab — allow pop-ups for this site', 'no');
+      saySigningIn('✕ Your browser blocked the sign-in window — allow pop-ups for this site', 'no');
       return;
     }
-    saySigningIn('Finish signing in, in the tab that just opened — this page follows by itself.');
+    saySigningIn('Choose your Google account in the small window — this page follows by itself.');
   };
 
   /* If we've just come back from Google and still aren't signed in, say what
@@ -1627,18 +1630,28 @@
     return b;
   }
 
-  /* Send the session home to the community page and say so. The sending
-     repeats quietly for a few seconds; the person doesn't wait for it. */
+  /* Send the session home to the community page, then get out of the way:
+     this little window closes itself, and the community behind it is
+     already signed in. The sending repeats quietly for a few seconds. */
   function handBack(pair) {
-    tabScreen('You’re signed in. ✓',
-      'Go back to the community tab — the app there lets you in by itself. You can close this tab.');
+    var pane = tabScreen('You’re signed in. ✓',
+      'This window closes by itself — the community behind it is letting you in right now.');
+    setTimeout(function () {
+      try { window.close(); } catch (e) {}
+      /* Some browsers refuse to let a window close itself after the
+         Google trip. Then the words carry it. */
+      setTimeout(function () {
+        tabScreen('You’re signed in. ✓',
+          'You can close this window — the community already has you in.');
+      }, 400);
+    }, 2500);
     return db.tokens().then(function (t) {
       return db.sendHandoff(pair, { tokens: t });
     }).then(clearPair).catch(function (err) {
       tabScreen('Nearly there',
-        'You are signed in, but this tab could not tell the community page (' +
+        'You are signed in, but this window could not tell the community page (' +
         ((err && err.message) || 'connection issue') +
-        '). Go back to the community tab and press the Google button once more.');
+        '). Go back to the community and press the Google button once more.');
     });
   }
 
