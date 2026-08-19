@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 47';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 48';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   var db = window.DB;
@@ -794,9 +794,12 @@
     var on = !(e && e.mine);
     applyReact(m, emoji, on, true);           // show it instantly
     var p = on ? db.react(m.id, room.a, emoji) : db.unreact(m.id, emoji);
-    p.catch(function () {
+    p.catch(function (err) {
       applyReact(m, emoji, !on, true);
-      toast('Reactions need the latest database update — see the admin notes.');
+      var why = (err && err.message) || 'unknown reason';
+      toast(/reactions/.test(why) && /find|exist|cache/.test(why)
+        ? 'Reactions need the database update — paste the SQL block in Supabase first.'
+        : '✕ The reaction was refused: ' + why);
     });
   }
 
