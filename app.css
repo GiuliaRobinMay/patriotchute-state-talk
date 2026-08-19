@@ -168,7 +168,7 @@ button,input,select,textarea{font-family:inherit}
 
 /* ── room ── */
 .room{flex:1;display:grid;grid-template-columns:186px 1fr 186px;min-height:0}
-.rail{border-right:1px solid var(--line);background:var(--deep);padding:14px 10px;overflow-y:auto;
+.rail{border-right:1px solid var(--line);background:var(--deep);padding:14px 10px;overflow-y:auto;min-height:0;
   display:flex;flex-direction:column;gap:2px}
 .rl{font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint2);padding:8px 8px 5px}
 .ri{display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:6px;cursor:pointer;background:none;
@@ -185,7 +185,10 @@ button,input,select,textarea{font-family:inherit}
 .room.solo{grid-template-columns:1fr 200px}
 .room.solo .rail{display:none}
 
-.mid{display:flex;flex-direction:column;min-width:0}
+/* min-height:0 is what lets the middle column SHRINK to the frame instead
+   of growing with its messages — without it, a long conversation pushes
+   the composer right out of the bottom of the embed. */
+.mid{display:flex;flex-direction:column;min-width:0;min-height:0}
 .top{padding:13px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
 .top .ttl{display:flex;flex-direction:column;min-width:0;flex:1}
 .top h1{font-family:var(--display);font-size:19px;font-weight:800;letter-spacing:-.03em;color:var(--paper);
@@ -282,7 +285,7 @@ button,input,select,textarea{font-family:inherit}
 .snd{background:var(--red);color:#FDF9F5;border:0;width:35px;height:35px;border-radius:50%;cursor:pointer;
   font-size:15px;flex:0 0 auto;display:flex;align-items:center;justify-content:center}
 
-aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 10px;overflow-y:auto}
+aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 10px;overflow-y:auto;min-height:0}
 .wl{font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint2);padding:0 6px 9px}
 .wp{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:5px}
 .wp .t{min-width:0}
