@@ -161,6 +161,11 @@ addEventListener('error', function (e) {
         <div class="chat" id="chat"></div>
 
         <div class="emoji" id="emoji" hidden></div>
+        <div class="rbar" id="rbar" hidden>
+          <span class="ra">↩</span>
+          <span class="rt">Replying to <b id="rbWho"></b> — <span id="rbTx"></span></span>
+          <button type="button" id="rbX" aria-label="Cancel the reply">×</button>
+        </div>
         <form class="cmp" id="cmp">
           <button class="emj" type="button" id="emjBtn" aria-label="Emoji" aria-expanded="false">☺</button>
           <input id="ci" type="text" aria-label="Message" autocomplete="off" enterkeyhint="send">

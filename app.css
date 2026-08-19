@@ -538,3 +538,32 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
 ::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:4px}
 ::-webkit-scrollbar-thumb:hover{background:var(--scroll2)}
 ::-webkit-scrollbar-corner{background:transparent}
+
+/* ── reactions, replies, member activity ── */
+.m .qt{display:block;border-left:3px solid var(--teal2);background:rgba(63,160,143,.09);
+  border-radius:6px;padding:5px 9px;margin-bottom:6px;cursor:pointer;white-space:normal}
+.m .qt b{display:block;font-size:11px;color:var(--teal2)}
+.m .qt span{font-size:12px;color:var(--dim);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:420px}
+.m.flash .tx{outline:2px solid var(--teal2);outline-offset:2px;transition:outline-color 1.2s}
+
+.rxs{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
+.m.mine .rxs{justify-content:flex-end}
+.rc{background:var(--panel);border:1px solid var(--line2);border-radius:12px;padding:2px 8px;
+  font-size:12px;color:var(--text);cursor:pointer;line-height:1.5}
+.rc:hover{border-color:var(--teal2)}
+.rc.mine{background:rgba(63,160,143,.16);border-color:var(--teal2)}
+
+.rpal{position:fixed;z-index:60;background:var(--panel);border:1px solid var(--line2);border-radius:22px;
+  padding:5px 8px;display:flex;gap:2px;box-shadow:0 12px 30px -12px rgba(0,0,0,.7)}
+.rpal button{background:none;border:0;font-size:19px;padding:4px;cursor:pointer;border-radius:50%;line-height:1}
+.rpal button:hover{background:var(--panel2)}
+
+.rbar{display:flex;align-items:center;gap:9px;padding:8px 18px;background:var(--deep);
+  border-top:1px solid var(--line);font-size:12.5px;color:var(--dim)}
+.rbar .ra{color:var(--teal2);font-size:14px}
+.rbar .rt{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rbar b{color:var(--text)}
+.rbar button{background:none;border:0;color:var(--faint);font-size:17px;cursor:pointer;padding:0 3px}
+.rbar button:hover{color:var(--red2)}
+
+.memrow .t .n .tagb.wrn{background:rgba(192,138,62,.16);color:var(--gold);border:1px solid var(--gold)}

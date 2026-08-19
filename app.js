@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 45';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 46';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   var db = window.DB;
@@ -121,6 +121,8 @@
   var stopMessages = function () {};
   var stopPresence = function () {};
   var stopVoiceWatch = function () {};
+  var stopReacts = function () {};
+  var lastSeenTouch = 0;
   var stopPeek = function () {};
   var unread = {};              // room -> messages since you last had it open
   var otherMics = 0;            // people on the mic in the room you are not in
@@ -580,8 +582,13 @@
 
     if (inCall) leaveVoice();
     stopPeek(); stopPeek = function () {};
-    stopMessages(); stopPresence(); stopVoiceWatch();
+    stopMessages(); stopPresence(); stopVoiceWatch(); stopReacts();
     onlineIds = {};
+    clearReply();
+    if (me && Date.now() - lastSeenTouch > 180000) {
+      lastSeenTouch = Date.now();
+      db.touchSeen();
+    }
 
     unread[s.a] = 0;
     unreadTab = 0;
@@ -605,6 +612,14 @@
     }, function (goneId) {
       var el = $('chat').querySelector('[data-id="' + goneId + '"]');
       if (el) el.remove();
+      delete msgIndex[goneId];
+    });
+
+    /* Other people's hearts land live; your own were drawn on the click. */
+    stopReacts = db.onReactions(s.a, function (mid, emoji, member, on) {
+      var m = msgIndex[mid];
+      if (!m || member === db.myId()) return;
+      applyReact(m, emoji, on, false);
     });
     if (me) {
       stopPresence = db.onPresence(s.a, me, function (people) {
@@ -715,6 +730,89 @@
       .then(function (d) { previewCache[url] = d; card(d); return d; });
   }
 
+  /* ── reactions and replies ───────────────────────────────────── */
+  var msgIndex = {};            // id -> message, for quotes and live updates
+  var replyingTo = null;
+  var EMOJIS = ['❤️', '👍', '🙏', '🇺🇸', '😂', '‼️'];
+  var palette = null;
+
+  function closePalette() {
+    if (palette) { palette.remove(); palette = null; }
+  }
+  document.addEventListener('click', function (e) {
+    if (palette && !palette.contains(e.target)) closePalette();
+  }, true);
+
+  function openPalette(btn, m) {
+    closePalette();
+    palette = document.createElement('div');
+    palette.className = 'rpal';
+    EMOJIS.forEach(function (em) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.textContent = em;
+      b.onclick = function () { closePalette(); toggleReact(m, em); };
+      palette.appendChild(b);
+    });
+    document.body.appendChild(palette);
+    var r = btn.getBoundingClientRect();
+    palette.style.top = Math.max(6, r.top - 44) + 'px';
+    palette.style.left = Math.min(window.innerWidth - palette.offsetWidth - 8,
+      Math.max(8, r.left - palette.offsetWidth / 2)) + 'px';
+  }
+
+  function renderReacts(bEl, m) {
+    var old = bEl.querySelector('.rxs');
+    if (old) old.remove();
+    var keys = Object.keys(m.reacts || {});
+    if (!keys.length) return;
+    var row = document.createElement('div'); row.className = 'rxs';
+    keys.forEach(function (em) {
+      var e = m.reacts[em];
+      var chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'rc' + (e.mine ? ' mine' : '');
+      chip.textContent = em + ' ' + e.n;
+      chip.onclick = function () { toggleReact(m, em); };
+      row.appendChild(chip);
+    });
+    bEl.appendChild(row);
+  }
+
+  function applyReact(m, emoji, on, mineFlag) {
+    m.reacts = m.reacts || {};
+    var slot = m.reacts[emoji] || (m.reacts[emoji] = { n: 0, mine: false });
+    slot.n += on ? 1 : -1;
+    if (mineFlag) slot.mine = on;
+    if (slot.n <= 0) delete m.reacts[emoji];
+    var el = $('chat').querySelector('.m[data-id="' + m.id + '"] .b');
+    if (el) renderReacts(el, m);
+  }
+
+  function toggleReact(m, emoji) {
+    if (!m.id || !db.shared) return;
+    var e = m.reacts && m.reacts[emoji];
+    var on = !(e && e.mine);
+    applyReact(m, emoji, on, true);           // show it instantly
+    var p = on ? db.react(m.id, room.a, emoji) : db.unreact(m.id, emoji);
+    p.catch(function () {
+      applyReact(m, emoji, !on, true);
+      toast('Reactions need the latest database update — see the admin notes.');
+    });
+  }
+
+  function startReply(m) {
+    replyingTo = m;
+    $('rbWho').textContent = m.mine ? 'yourself' : m.name;
+    $('rbTx').textContent = m.text.length > 60 ? m.text.slice(0, 60) + '…' : m.text;
+    $('rbar').hidden = false;
+    $('ci').focus();
+  }
+  function clearReply() {
+    replyingTo = null;
+    $('rbar').hidden = true;
+  }
+  $('rbX').onclick = clearReply;
+
   function messageEl(m) {
     var wrap = document.createElement('div'); wrap.className = 'm' + (m.mine ? ' mine' : '');
     if (m.id) wrap.dataset.id = m.id;
@@ -732,6 +830,20 @@
     var tm = document.createElement('span'); tm.className = 'tm'; tm.textContent = clock(m.ts);
     h.appendChild(tm);
 
+    if (m.id && db.shared) {
+      var rx = document.createElement('button');
+      rx.type = 'button'; rx.className = 'rep';
+      rx.title = 'React to this message';
+      rx.textContent = '☺';
+      rx.onclick = function (e) { e.stopPropagation(); openPalette(rx, m); };
+      h.appendChild(rx);
+      var rpl = document.createElement('button');
+      rpl.type = 'button'; rpl.className = 'rep';
+      rpl.title = 'Reply to this message';
+      rpl.textContent = '↩';
+      rpl.onclick = function () { startReply(m); };
+      h.appendChild(rpl);
+    }
     if (!m.mine && m.id && db.shared) {
       var rep = document.createElement('button');
       rep.type = 'button'; rep.className = 'rep';
@@ -750,10 +862,30 @@
     }
 
     var tx = document.createElement('div'); tx.className = 'tx';
+    /* An answer carries a little quote of what it answers — click it to
+       jump there. */
+    if (m.replyTo) {
+      var q = msgIndex[m.replyTo];
+      var qd = document.createElement('div'); qd.className = 'qt';
+      var qn = document.createElement('b');
+      qn.textContent = q ? q.name : 'An earlier message';
+      var qx = document.createElement('span');
+      qx.textContent = q ? (q.text.length > 90 ? q.text.slice(0, 90) + '…' : q.text) : '';
+      qd.appendChild(qn); qd.appendChild(qx);
+      qd.onclick = function () {
+        var t = $('chat').querySelector('.m[data-id="' + m.replyTo + '"]');
+        if (!t) return;
+        t.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        t.classList.add('flash');
+        setTimeout(function () { t.classList.remove('flash'); }, 1500);
+      };
+      tx.appendChild(qd);
+    }
     var firstLink = linkify(tx, m.text);
     b.appendChild(h); b.appendChild(tx);
     /* The card lives inside the bubble — one message, one box. */
     if (firstLink) attachPreview(tx, firstLink);
+    renderReacts(b, m);
 
     var av = document.createElement('span'); av.className = 'av sm' + (m.admin ? ' admring' : '');
     avatar(av, m);
@@ -772,12 +904,16 @@
     var chat = $('chat');
     var empty = chat.querySelector('.sys.empty');
     if (empty) empty.remove();
-    chat.appendChild(messageEl(m));
+    if (m.id) msgIndex[m.id] = m;
+    var el = messageEl(m);
+    chat.appendChild(el);
+    return el;
   }
 
   function loadChat() {
     var chat = $('chat');
     chat.textContent = '';
+    msgIndex = {};
     db.messages(room.a).then(function (msgs) {
       chat.textContent = '';
       if (!msgs.length) {
@@ -787,6 +923,8 @@
         chat.appendChild(e);
         return;
       }
+      /* Index first, so a reply can quote a message further down the list. */
+      msgs.forEach(function (m) { if (m.id) msgIndex[m.id] = m; });
       msgs.forEach(function (m) { chat.appendChild(messageEl(m)); });
       chat.scrollTop = chat.scrollHeight;
     }).catch(function (err) {
@@ -806,11 +944,21 @@
     var msg = {
       name: me.name, city: me.city, photo: me.photo,
       bg: me.bg, fg: me.fg, text: text, ts: Date.now(), mine: true,
-      admin: !!me.host
+      admin: !!me.host,
+      replyTo: replyingTo ? replyingTo.id : 0
     };
-    appendMessage(msg);                          // show it immediately
+    var replyId = msg.replyTo;
+    clearReply();
+    var el = appendMessage(msg);                 // show it immediately
     $('chat').scrollTop = $('chat').scrollHeight;
-    db.send(room.a, msg).catch(function (err) {
+    db.send(room.a, msg, replyId).then(function (saved) {
+      /* Once the database has named it, redraw it whole — with its id it
+         can be reacted to and replied to straight away. */
+      msg.id = saved.id;
+      msgIndex[msg.id] = msg;
+      var el2 = messageEl(msg);
+      el.replaceWith(el2);
+    }).catch(function (err) {
       var e2 = document.createElement('div');
       e2.className = 'sys';
       e2.textContent = 'That message did not send — ' + ((err && err.message) || 'check your connection');
@@ -1632,10 +1780,33 @@
     memTimer = setTimeout(function () { loadMembersAdmin(q); }, 400);
   };
 
+  /* "3d ago", "just now" — for the members list. */
+  function fmtAgo(iso) {
+    if (!iso) return 'not seen yet';
+    var mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+    if (mins < 3) return 'online now';
+    if (mins < 60) return mins + ' min ago';
+    if (mins < 1440) return Math.floor(mins / 60) + 'h ago';
+    var days = Math.floor(mins / 1440);
+    return days === 1 ? 'yesterday' : days + ' days ago';
+  }
+
   function loadMembersAdmin(q) {
     var box = $('memList');
     box.textContent = 'Loading…';
-    db.membersAll(q).then(function (list) {
+    /* The reports ride along, so a member with flagged messages carries
+       a warning right in the list. */
+    Promise.all([
+      db.membersAll(q),
+      db.reports().catch(function () { return []; })
+    ]).then(function (both) {
+      var list = both[0];
+      var flagged = {};   // author id -> {msgs, flags}
+      both[1].forEach(function (r) {
+        if (!r.authorId) return;
+        var f = flagged[r.authorId] || (flagged[r.authorId] = { msgs: 0, flags: 0 });
+        f.msgs++; f.flags += r.count;
+      });
       box.textContent = '';
       if (!list.length) {
         var e = document.createElement('p'); e.className = 'hint';
@@ -1651,9 +1822,21 @@
         var n = document.createElement('span'); n.className = 'n'; n.textContent = m2.name;
         if (m2.is_host) { var b1 = document.createElement('span'); b1.className = 'tagb adm'; b1.textContent = 'Admin'; n.appendChild(b1); }
         if (m2.banned)  { var b2 = document.createElement('span'); b2.className = 'tagb ban'; b2.textContent = 'Removed'; n.appendChild(b2); }
+        var fl = flagged[m2.id];
+        if (fl) {
+          var wb = document.createElement('span'); wb.className = 'tagb wrn';
+          wb.textContent = '⚠ ' + fl.msgs + ' flagged';
+          wb.title = fl.flags + (fl.flags === 1 ? ' report' : ' reports') +
+            ' on ' + fl.msgs + (fl.msgs === 1 ? ' message' : ' messages') + ' — see the Reports tab';
+          n.appendChild(wb);
+        }
         var dd = document.createElement('span'); dd.className = 'd';
         dd.textContent = [byAbbr(m2.state).n, m2.city, m2.email].filter(Boolean).join(' · ');
-        t.appendChild(n); t.appendChild(dd);
+        var mt = document.createElement('span'); mt.className = 'd';
+        mt.textContent = (m2.created_at
+          ? 'Joined ' + new Date(m2.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          : '') + ' · last seen ' + fmtAgo(m2.last_seen);
+        t.appendChild(n); t.appendChild(dd); t.appendChild(mt);
         var acts = document.createElement('span'); acts.className = 'acts';
         if (me && m2.id !== me.id) {
           var ban = document.createElement('button'); ban.type = 'button';

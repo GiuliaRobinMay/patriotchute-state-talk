@@ -101,6 +101,11 @@
     micPulse: function () {},
     herePulse: function () {},
     peekPeopleMany: function () { return function () {}; },
+    react: function () { return Promise.resolve(); },
+    unreact: function () { return Promise.resolve(); },
+    onReactions: function () { return function () {}; },
+    myId: function () { return ''; },
+    touchSeen: function () { return Promise.resolve(); },
     setNoticeDisabled: function () { return Promise.resolve(); },
     deleteNotice: function () { return Promise.resolve(); },
     report: function () { return Promise.resolve(); },
@@ -258,6 +263,8 @@
         admin: !!(who && who.is_host),
         text: r.body,
         mine: r.author === uid,
+        replyTo: r.reply_to || 0,
+        reacts: {},
         ts: new Date(r.created_at).getTime()
       };
     }
@@ -431,11 +438,21 @@
          staring at an empty room. Fetch the messages, then look up the
          handful of authors we haven't seen before. */
       messages: function (room) {
-        return client.from('messages')
-          .select('id, body, created_at, author')
-          .eq('room', room)
-          .order('created_at', { ascending: false })
-          .limit(200)
+        function fetchRows(cols) {
+          return client.from('messages')
+            .select(cols)
+            .eq('room', room)
+            .order('created_at', { ascending: false })
+            .limit(200);
+        }
+        /* reply_to arrives by migration; until it has run, load without. */
+        return fetchRows('id, body, created_at, author, reply_to')
+          .then(function (r) {
+            if (r.error && /reply_to/.test(r.error.message || '')) {
+              return fetchRows('id, body, created_at, author');
+            }
+            return r;
+          })
           .then(function (r) {
             if (r.error) throw r.error;
             var rows = r.data.reverse();
@@ -443,18 +460,37 @@
             rows.forEach(function (x) {
               if (!cache[x.author] && need.indexOf(x.author) === -1) need.push(x.author);
             });
-            if (!need.length) {
-              return rows.map(function (x) { return row2msg(x, cache[x.author]); });
-            }
-            return client.from('profiles')
-              .select('id, name, city, bg, fg, photo, is_host')
-              .in('id', need)
-              .then(function (p) {
-                if (!p.error && p.data) {
-                  p.data.forEach(function (pr) { cache[pr.id] = pr; });
-                }
-                return rows.map(function (x) { return row2msg(x, cache[x.author]); });
+            var authors = !need.length ? Promise.resolve() :
+              client.from('profiles')
+                .select('id, name, city, bg, fg, photo, is_host')
+                .in('id', need)
+                .then(function (p) {
+                  if (!p.error && p.data) {
+                    p.data.forEach(function (pr) { cache[pr.id] = pr; });
+                  }
+                }, function () {});
+            /* Reactions ride along; a missing table just means none. */
+            var ids = rows.map(function (x) { return x.id; });
+            var reacts = !ids.length ? Promise.resolve([]) :
+              client.from('reactions')
+                .select('message_id, member, emoji')
+                .in('message_id', ids)
+                .then(function (rr) { return (rr.error || !rr.data) ? [] : rr.data; },
+                      function () { return []; });
+            return Promise.all([authors, reacts]).then(function (both) {
+              var byMsg = {};
+              both[1].forEach(function (x) {
+                var slot = byMsg[x.message_id] = byMsg[x.message_id] || {};
+                var e = slot[x.emoji] = slot[x.emoji] || { n: 0, mine: false };
+                e.n++;
+                if (x.member === uid) e.mine = true;
               });
+              return rows.map(function (x) {
+                var m = row2msg(x, cache[x.author]);
+                if (byMsg[x.id]) m.reacts = byMsg[x.id];
+                return m;
+              });
+            });
           });
       },
 
@@ -471,14 +507,65 @@
           });
       },
 
-      send: function (room, msg) {
+      send: function (room, msg, replyTo) {
+        var row = { room: room, author: uid, body: msg.text };
+        if (replyTo) row.reply_to = replyTo;
         return client.from('messages')
-          .insert({ room: room, author: uid, body: msg.text })
-          .select().single()
+          .insert(row).select().single()
+          .then(function (r) {
+            /* Until the reply migration has run, send without the thread. */
+            if (r.error && replyTo && /reply_to/.test(r.error.message || '')) {
+              delete row.reply_to;
+              return client.from('messages').insert(row).select().single();
+            }
+            return r;
+          })
           .then(function (r) {
             if (r.error) throw r.error;
             return row2msg(r.data, msg);
           });
+      },
+
+      /* ── reactions ─────────────────────────────────────────────── */
+      react: function (messageId, room, emoji) {
+        return client.from('reactions')
+          .insert({ message_id: messageId, room: room, member: uid, emoji: emoji })
+          .then(function (r) {
+            /* 23505 = already reacted with this one — same outcome */
+            if (r.error && r.error.code !== '23505') throw r.error;
+          });
+      },
+      unreact: function (messageId, emoji) {
+        return client.from('reactions')
+          .delete().eq('message_id', messageId).eq('member', uid).eq('emoji', emoji)
+          .then(function (r) { if (r.error) throw r.error; });
+      },
+      onReactions: function (room, cb) {
+        var ch = client.channel(uniq('reacts-' + room))
+          .on('postgres_changes',
+              { event: 'INSERT', schema: 'public', table: 'reactions', filter: 'room=eq.' + room },
+              function (p) {
+                var r = p.new;
+                cb(r.message_id, r.emoji, r.member, true);
+              })
+          .on('postgres_changes',
+              { event: 'DELETE', schema: 'public', table: 'reactions' },
+              function (p) {
+                var r = p.old || {};
+                if (r.message_id && r.emoji) cb(r.message_id, r.emoji, r.member, false);
+              })
+          .subscribe();
+        return function () { try { client.removeChannel(ch); } catch (e) {} };
+      },
+      myId: function () { return uid; },
+
+      /* A light touch on the profile row so admins can see who is around.
+         Fails silently until the migration has run. */
+      touchSeen: function () {
+        return client.from('profiles')
+          .update({ last_seen: new Date().toISOString() })
+          .eq('id', uid)
+          .then(function () {}, function () {});
       },
 
       /* New rows arrive without the author's name attached, so look it up
@@ -794,12 +881,22 @@
       },
 
       membersAll: function (q) {
-        var sel = client.from('profiles')
-          .select('id, name, city, state, email, is_host, banned, bg, fg, photo')
-          .order('created_at', { ascending: false })
-          .limit(200);
-        if (q) sel = sel.ilike('name', '%' + q + '%');
-        return sel.then(function (r) { if (r.error) throw r.error; return r.data || []; });
+        function go(cols) {
+          var sel = client.from('profiles')
+            .select(cols)
+            .order('created_at', { ascending: false })
+            .limit(200);
+          if (q) sel = sel.ilike('name', '%' + q + '%');
+          return sel;
+        }
+        return go('id, name, city, state, email, is_host, banned, bg, fg, photo, created_at, last_seen')
+          .then(function (r) {
+            if (r.error && /last_seen/.test(r.error.message || '')) {
+              return go('id, name, city, state, email, is_host, banned, bg, fg, photo, created_at');
+            }
+            return r;
+          })
+          .then(function (r) { if (r.error) throw r.error; return r.data || []; });
       },
 
       setBanned: function (id, b) {

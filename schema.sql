@@ -207,3 +207,47 @@ $$;
 --   update profiles set is_host = true where name = 'Your Name';
 --
 -- Hosts can reach every state room and pin announcements.
+
+-- ── reactions, replies, and member activity (build 46) ────────────
+-- Paste this whole block in the SQL editor; it is safe to run twice.
+
+alter table profiles add column if not exists last_seen timestamptz;
+grant update (last_seen) on table profiles to authenticated;
+
+alter table messages add column if not exists reply_to bigint references messages(id) on delete set null;
+
+create table if not exists reactions (
+  id          bigint generated always as identity primary key,
+  message_id  bigint not null references messages on delete cascade,
+  room        char(2) not null,
+  member      uuid not null references auth.users on delete cascade,
+  emoji       text not null,
+  created_at  timestamptz not null default now(),
+  unique (message_id, member, emoji)     -- one of each emoji per person
+);
+
+create index if not exists reactions_message_idx on reactions (message_id);
+alter table reactions enable row level security;
+-- deletions must say which reaction died, not just its row id
+alter table reactions replica identity full;
+
+drop policy if exists "members read reactions" on reactions;
+drop policy if exists "react as yourself"      on reactions;
+drop policy if exists "unreact your own"       on reactions;
+
+create policy "members read reactions" on reactions
+  for select to authenticated using (true);
+
+create policy "react as yourself" on reactions
+  for insert to authenticated with check (
+    auth.uid() = member
+    and not exists (select 1 from profiles p where p.id = auth.uid() and p.banned)
+  );
+
+create policy "unreact your own" on reactions
+  for delete to authenticated using (auth.uid() = member);
+
+do $$ begin
+  alter publication supabase_realtime add table reactions;
+exception when duplicate_object then null;
+end $$;
