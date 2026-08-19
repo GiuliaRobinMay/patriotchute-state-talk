@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 46';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 47';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   var db = window.DB;
