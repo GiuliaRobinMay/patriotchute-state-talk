@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 41';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 42';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   var db = window.DB;
@@ -638,7 +638,7 @@
      Only http(s) and www. shapes qualify, and they open in a new tab. */
   function linkify(el, text) {
     var re = /(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+\.[^\s<>"']{2,})/g;
-    var last = 0, m2;
+    var last = 0, m2, first = '';
     while ((m2 = re.exec(text)) !== null) {
       if (m2.index > last) el.appendChild(document.createTextNode(text.slice(last, m2.index)));
       var raw = m2[0];
@@ -650,12 +650,66 @@
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
       el.appendChild(a);
+      if (!first) first = a.href;
       if (trimmed.length < raw.length) {
         el.appendChild(document.createTextNode(raw.slice(trimmed.length)));
       }
       last = m2.index + raw.length;
     }
     if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
+    return first;
+  }
+
+  /* A card under the message, the way the big platforms do it: the page's
+     own title and image, fetched once for everyone via /api/preview. Some
+     sites (Instagram, X) keep their previews behind a login — then there
+     is simply no card, and the link stays a link. */
+  var previewCache = {};
+
+  function stickToBottom() {
+    var c = $('chat');
+    if (c.scrollHeight - c.scrollTop - c.clientHeight < 130) c.scrollTop = c.scrollHeight;
+  }
+
+  function attachPreview(bubble, url) {
+    if (!db.shared) return;
+    function card(d) {
+      if (!d || (!d.title && !d.image)) return;
+      var a = document.createElement('a');
+      a.className = 'lcard';
+      a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      if (d.image) {
+        var im = new Image();
+        im.src = d.image; im.alt = ''; im.loading = 'lazy';
+        im.onerror = function () { im.remove(); };
+        im.onload = stickToBottom;
+        a.appendChild(im);
+      }
+      var host = '';
+      try { host = new URL(url).hostname.replace(/^www\./, ''); } catch (e) {}
+      var t = document.createElement('span'); t.className = 'lt';
+      t.textContent = d.title || d.site || host;
+      a.appendChild(t);
+      if (d.desc) {
+        var ds = document.createElement('span'); ds.className = 'ls';
+        ds.textContent = d.desc;
+        a.appendChild(ds);
+      }
+      var dm = document.createElement('span'); dm.className = 'ld';
+      dm.textContent = d.site ? d.site + ' · ' + host : host;
+      a.appendChild(dm);
+      bubble.appendChild(a);
+      stickToBottom();
+    }
+    var hit = previewCache[url];
+    if (hit) {
+      if (hit.then) hit.then(card); else card(hit);
+      return;
+    }
+    previewCache[url] = fetch('/api/preview?url=' + encodeURIComponent(url))
+      .then(function (r) { return r.ok && r.status === 200 ? r.json() : null; })
+      .catch(function () { return null; })
+      .then(function (d) { previewCache[url] = d; card(d); return d; });
   }
 
   function messageEl(m) {
@@ -692,8 +746,10 @@
       h.appendChild(rep);
     }
 
-    var tx = document.createElement('div'); tx.className = 'tx'; linkify(tx, m.text);
+    var tx = document.createElement('div'); tx.className = 'tx';
+    var firstLink = linkify(tx, m.text);
     b.appendChild(h); b.appendChild(tx);
+    if (firstLink) attachPreview(b, firstLink);
 
     if (!m.mine) {
       var av = document.createElement('span'); av.className = 'av sm' + (m.admin ? ' admring' : '');

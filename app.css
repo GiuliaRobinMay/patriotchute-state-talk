@@ -509,6 +509,18 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
 .tx a{color:var(--teal2);text-decoration:underline;text-underline-offset:2px;overflow-wrap:anywhere}
 .tx a:hover{filter:brightness(1.15)}
 
+/* the preview card under a pasted link */
+.lcard{display:flex;flex-direction:column;margin-top:8px;max-width:340px;background:var(--panel);
+  border:1px solid var(--line2);border-radius:9px;overflow:hidden;text-decoration:none;cursor:pointer}
+.lcard:hover{border-color:var(--teal2)}
+.lcard img{width:100%;max-height:170px;object-fit:cover;display:block;background:var(--panel2)}
+.lcard .lt{font-size:13px;font-weight:700;color:var(--text);padding:9px 12px 0;line-height:1.35;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.lcard .ls{font-size:12px;color:var(--dim);padding:4px 12px 0;line-height:1.4;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.lcard .ld{font-family:var(--mono);font-size:10px;color:var(--faint);padding:7px 12px 10px;
+  text-transform:lowercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
 /* our own confirm and notices — the native ones never show in the embed */
 .askmsg{font-size:14.5px;color:var(--text);margin:0;line-height:1.5}
 .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--panel);
