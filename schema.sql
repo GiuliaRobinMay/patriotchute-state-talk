@@ -128,8 +128,9 @@ alter table notices  add column if not exists repeats boolean not null default f
 -- A member may edit their own row, so without this they could also edit
 -- is_host or banned and promote themselves. Column grants close that door;
 -- admins change those two columns through the functions below instead.
+alter table profiles add column if not exists last_seen timestamptz;
 revoke update on table profiles from authenticated;
-grant update (name, city, state, bg, fg, photo, email, updated_at)
+grant update (name, city, state, bg, fg, photo, email, updated_at, last_seen)
   on table profiles to authenticated;
 
 -- The banned cannot post; admins may remove anything.
