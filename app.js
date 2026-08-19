@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 42';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 43';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   var db = window.DB;
@@ -749,14 +749,19 @@
     var tx = document.createElement('div'); tx.className = 'tx';
     var firstLink = linkify(tx, m.text);
     b.appendChild(h); b.appendChild(tx);
-    if (firstLink) attachPreview(b, firstLink);
+    /* The card lives inside the bubble — one message, one box. */
+    if (firstLink) attachPreview(tx, firstLink);
 
-    if (!m.mine) {
-      var av = document.createElement('span'); av.className = 'av sm' + (m.admin ? ' admring' : '');
-      avatar(av, m);
+    var av = document.createElement('span'); av.className = 'av sm' + (m.admin ? ' admring' : '');
+    avatar(av, m);
+    if (m.mine) {
+      /* your face on the right, where your messages sit */
+      wrap.appendChild(b);
       wrap.appendChild(av);
+    } else {
+      wrap.appendChild(av);
+      wrap.appendChild(b);
     }
-    wrap.appendChild(b);
     return wrap;
   }
 
@@ -797,7 +802,8 @@
     i.value = '';
     var msg = {
       name: me.name, city: me.city, photo: me.photo,
-      bg: me.bg, fg: me.fg, text: text, ts: Date.now(), mine: true
+      bg: me.bg, fg: me.fg, text: text, ts: Date.now(), mine: true,
+      admin: !!me.host
     };
     appendMessage(msg);                          // show it immediately
     $('chat').scrollTop = $('chat').scrollHeight;

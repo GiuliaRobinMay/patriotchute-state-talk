@@ -509,9 +509,10 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
 .tx a{color:var(--teal2);text-decoration:underline;text-underline-offset:2px;overflow-wrap:anywhere}
 .tx a:hover{filter:brightness(1.15)}
 
-/* the preview card under a pasted link */
+/* the preview card, inside the same bubble as the message */
 .lcard{display:flex;flex-direction:column;margin-top:8px;max-width:340px;background:var(--panel);
-  border:1px solid var(--line2);border-radius:9px;overflow:hidden;text-decoration:none;cursor:pointer}
+  border:1px solid var(--line2);border-radius:9px;overflow:hidden;text-decoration:none;cursor:pointer;
+  white-space:normal;text-align:left}
 .lcard:hover{border-color:var(--teal2)}
 .lcard img{width:100%;max-height:170px;object-fit:cover;display:block;background:var(--panel2)}
 .lcard .lt{font-size:13px;font-weight:700;color:var(--text);padding:9px 12px 0;line-height:1.35;
