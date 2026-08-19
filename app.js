@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 43';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 44';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   var db = window.DB;
@@ -680,6 +680,9 @@
       a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
       if (d.image) {
         var im = new Image();
+        /* Some image hosts refuse pictures when they can see which site is
+           asking. Don't tell them — that's what the platforms do too. */
+        im.referrerPolicy = 'no-referrer';
         im.src = d.image; im.alt = ''; im.loading = 'lazy';
         im.onerror = function () { im.remove(); };
         im.onload = stickToBottom;

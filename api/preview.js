@@ -97,7 +97,14 @@ module.exports = async function (req, res) {
 
     var title = pick(got, meta('og:title')) || pick(got, meta('twitter:title')) ||
                 pick(got, [/<title[^>]*>([^<]+)<\/title>/i]);
-    var image = pick(got, meta('og:image')) || pick(got, meta('twitter:image'));
+    /* Every place a picture hides: Facebook and friends use several. */
+    var image = pick(got, meta('og:image')) ||
+                pick(got, meta('og:image:secure_url')) ||
+                pick(got, meta('og:image:url')) ||
+                pick(got, meta('twitter:image')) ||
+                pick(got, meta('twitter:image:src')) ||
+                pick(got, [/<link[^>]+rel=["']image_src["'][^>]+href=["']([^"']+)["']/i,
+                           /<link[^>]+href=["']([^"']+)["'][^>]+rel=["']image_src["']/i]);
     var desc  = pick(got, meta('og:description')) || pick(got, meta('description'));
     var site  = pick(got, meta('og:site_name'));
 
