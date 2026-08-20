@@ -48,6 +48,7 @@
         you: k === myId,
         name: meta.name || 'Someone',
         bg: meta.bg, fg: meta.fg,
+        uid: meta.uid || '',
         admin: !!meta.host,
         role: role,
         talking: role === 'mic' &&
@@ -265,7 +266,7 @@
 
     listen: function (ab, who) {
       if (myRole === 'mic') return;      // already louder than a listener
-      localMeta = { name: who.name, bg: who.bg, fg: who.fg, host: !!who.host, role: 'listen' };
+      localMeta = { name: who.name, bg: who.bg, fg: who.fg, host: !!who.host, uid: who.id || '', role: 'listen' };
       myRole = 'listen';
       if (!ensure(ab)) return;
       announce();
@@ -282,7 +283,7 @@
 
     join: function (ab, who, stream) {
       localStream = stream;
-      localMeta = { name: who.name, bg: who.bg, fg: who.fg, host: !!who.host, role: 'mic' };
+      localMeta = { name: who.name, bg: who.bg, fg: who.fg, host: !!who.host, uid: who.id || '', role: 'mic' };
       var AC = window.AudioContext || window.webkitAudioContext;
       if (AC) {
         localCtx = new AC();

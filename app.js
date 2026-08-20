@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 49';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 50';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   var db = window.DB;
@@ -629,11 +629,19 @@
            presence says is here IS the roster. */
         if (room.a === 'US') {
           members = people.map(function (p) {
+            var you = me && p.id === me.id;
             return { id: p.id, name: p.name || 'Someone', city: p.city,
                      bg: p.bg, fg: p.fg, admin: p.admin,
-                     online: true, you: me && p.id === me.id };
+                     photo: you ? me.photo : (photoByUid[p.id] || null),
+                     online: true, you: you };
           });
           markOnline();
+          fillPhotosFor(people.map(function (p) { return p.id; }), function () {
+            members.forEach(function (mm) {
+              if (!mm.photo) mm.photo = photoByUid[mm.id] || null;
+            });
+            markOnline();
+          });
           return;
         }
         /* Somebody online who wasn't in the list means a new member joined
@@ -1404,10 +1412,38 @@
   var talkOpen = false;
   var lastVoiceList = [];
 
+  /* Presence only carries ids and colors — faces are looked up once per
+     person and remembered, then the view redraws itself. */
+  var photoByUid = {};
+  function fillPhotosFor(ids, done) {
+    var need = ids.filter(function (id) {
+      return id && !(id in photoByUid) && !(me && id === me.id);
+    });
+    if (!need.length) return;
+    need.forEach(function (id) { photoByUid[id] = null; });   // in flight
+    db.profilesByIds(need).then(function (map) {
+      var got = false;
+      need.forEach(function (id) {
+        photoByUid[id] = (map[id] && map[id].photo) || null;
+        if (photoByUid[id]) got = true;
+      });
+      if (got && done) done();
+    }).catch(function () {});
+  }
+
+  function voiceFace(p) {
+    return {
+      name: p.name, bg: p.bg, fg: p.fg,
+      photo: p.you ? (me && me.photo) : (p.uid ? photoByUid[p.uid] : null)
+    };
+  }
+
   /* One renderer feeding both places the call appears: the thin strip on
      the chat view, and the Live Room stage. */
   function renderVoice(list) {
     lastVoiceList = list || [];
+    fillPhotosFor(lastVoiceList.map(function (p) { return p.uid; }),
+      function () { renderVoice(lastVoiceList); });
     var speakers = lastVoiceList.filter(function (p) { return p.role !== 'listen'; });
     var ears = lastVoiceList.filter(function (p) { return p.role === 'listen'; });
 
@@ -1420,7 +1456,7 @@
       w.className = 'w' + (p.talking ? ' talk' : '');
       var ring = document.createElement('span'); ring.className = 'ring';
       var av = document.createElement('span'); av.className = 'av sm' + (p.admin ? ' admring' : '');
-      avatar(av, { name: p.name, bg: p.bg, fg: p.fg });
+      avatar(av, voiceFace(p));
       w.appendChild(ring); w.appendChild(av);
       mics.appendChild(w);
       names.push(p.you ? 'you' : String(p.name).split(/\s+/)[0]);
@@ -1452,7 +1488,7 @@
       var avw = document.createElement('span'); avw.className = 'avw';
       var ring = document.createElement('span'); ring.className = 'ring';
       var av = document.createElement('span'); av.className = 'av' + (p.admin ? ' admring' : '');
-      avatar(av, { name: p.name, bg: p.bg, fg: p.fg });
+      avatar(av, voiceFace(p));
       avw.appendChild(ring); avw.appendChild(av);
       var nm = document.createElement('span'); nm.className = 'nm';
       if (p.you) { var bb = document.createElement('b'); bb.textContent = 'You'; nm.appendChild(bb); }
@@ -1475,7 +1511,7 @@
       var d = document.createElement('div');
       d.className = 'ear';
       var av = document.createElement('span'); av.className = 'av' + (p.admin ? ' admring' : '');
-      avatar(av, { name: p.name, bg: p.bg, fg: p.fg });
+      avatar(av, voiceFace(p));
       var nm = document.createElement('span'); nm.className = 'nm';
       nm.textContent = p.you ? 'You' : p.name;
       d.appendChild(av); d.appendChild(nm);

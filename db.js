@@ -105,6 +105,7 @@
     unreact: function () { return Promise.resolve(); },
     onReactions: function () { return function () {}; },
     myId: function () { return ''; },
+    profilesByIds: function () { return Promise.resolve({}); },
     touchSeen: function () { return Promise.resolve(); },
     setNoticeDisabled: function () { return Promise.resolve(); },
     deleteNotice: function () { return Promise.resolve(); },
@@ -558,6 +559,24 @@
         return function () { try { client.removeChannel(ch); } catch (e) {} };
       },
       myId: function () { return uid; },
+
+      /* Profiles by id, through the same cache the chat uses — for putting
+         faces on presence, which only carries ids. */
+      profilesByIds: function (ids) {
+        var need = ids.filter(function (id) { return id && !cache[id]; });
+        var fill = !need.length ? Promise.resolve() :
+          client.from('profiles')
+            .select('id, name, city, bg, fg, photo, is_host')
+            .in('id', need)
+            .then(function (p) {
+              if (!p.error && p.data) p.data.forEach(function (pr) { cache[pr.id] = pr; });
+            }, function () {});
+        return fill.then(function () {
+          var out = {};
+          ids.forEach(function (id) { if (cache[id]) out[id] = cache[id]; });
+          return out;
+        });
+      },
 
       /* A light touch on the profile row so admins can see who is around.
          Fails silently until the migration has run. */
