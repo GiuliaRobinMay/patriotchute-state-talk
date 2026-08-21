@@ -389,17 +389,31 @@
         return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : '';
       },
 
+      /* Update, and only insert when there is nothing to update. Not an
+         upsert: an upsert rewrites every column it is handed, including
+         id — and the column grants (rightly) forbid members to touch id,
+         so the whole save was refused. */
       saveProfile: function (p) {
-        return client.from('profiles').upsert({
-          id: uid, name: p.name, city: p.city, state: p.state,
+        var row = {
+          name: p.name, city: p.city, state: p.state,
           bg: p.bg, fg: p.fg, photo: p.photo, email: p.email || authEmail,
           updated_at: new Date().toISOString()
-        }).select().single().then(function (r) {
+        };
+        function done(r) {
           if (r.error) throw r.error;
           p.id = uid;
-          p.host = r.data.is_host;
+          p.host = !!(r.data && r.data.is_host);
           return p;
-        });
+        }
+        return client.from('profiles')
+          .update(row).eq('id', uid)
+          .select().maybeSingle()
+          .then(function (r) {
+            if (r.error) throw r.error;
+            if (r.data) return done(r);
+            row.id = uid;                        // first save: the row is new
+            return client.from('profiles').insert(row).select().single().then(done);
+          });
       },
 
       /* The local session dies first and unconditionally — no network call
