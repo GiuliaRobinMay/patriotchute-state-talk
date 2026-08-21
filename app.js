@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 51';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 52';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   var db = window.DB;
@@ -1076,7 +1076,7 @@
         var live = Date.now() >= n.starts && Date.now() < n.starts + 3 * 3600000;
         when.hidden = false;
         when.classList.toggle('live', live);
-        when.textContent = (live ? '● Happening now — join the mic' : '🗓 ' +
+        when.textContent = (live ? '● State Talk Time — join the mic' : '🗓 ' +
           wd.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }) +
           ' · ' + wd.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) +
           ' — your local time');
@@ -1548,7 +1548,7 @@
         date.className = 'gdate' + (g.live ? ' live' : '');
         var gm = document.createElement('div'); gm.className = 'gm';
         var gd = document.createElement('div'); gd.className = 'gd';
-        if (g.live) { gm.textContent = 'LIVE'; gd.textContent = 'NOW'; }
+        if (g.live) { gm.textContent = 'TALK'; gd.textContent = 'NOW'; }
         else if (g.repeats) {
           gm.textContent = 'EVERY';
           gd.textContent = d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();

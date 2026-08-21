@@ -645,21 +645,41 @@
           });
       },
 
-      /* Presence is ephemeral by nature — nobody needs it written down. */
+      /* Presence is ephemeral by nature — nobody needs it written down.
+         The name must be truly free before rejoining it: the client hands
+         back a same-named channel even while it is still saying goodbye
+         after a room switch, and joining that half-dead instance breaks
+         presence one-directionally. */
       onPresence: function (room, me, cb) {
-        var ch = client.channel('presence:' + room, { config: { presence: { key: uid } } });
-        ch.on('presence', { event: 'sync' }, function () {
-          var st = ch.presenceState();
-          cb(Object.keys(st).map(function (k) {
-            var m = (st[k] && st[k][0]) || {};
-            return { id: k, name: m.name, city: m.city, bg: m.bg, fg: m.fg, admin: !!m.host };
-          }));
-        }).subscribe(function (status) {
-          if (status === 'SUBSCRIBED') {
-            ch.track({ name: me.name, city: me.city, bg: me.bg, fg: me.fg, host: !!me.host });
+        var full = 'realtime:presence:' + room;
+        var ch = null, dead = false;
+        (function whenFree(tries) {
+          if (dead) return;
+          var stale = (client.getChannels ? client.getChannels() : []).find(function (x) {
+            return x.topic === full;
+          });
+          if (stale && tries < 40) {
+            try { client.removeChannel(stale).catch(function () {}); } catch (e) {}
+            setTimeout(function () { whenFree(tries + 1); }, 50);
+            return;
           }
-        });
-        return function () { client.removeChannel(ch); };
+          ch = client.channel('presence:' + room, { config: { presence: { key: uid } } });
+          ch.on('presence', { event: 'sync' }, function () {
+            var st = ch.presenceState();
+            cb(Object.keys(st).map(function (k) {
+              var m = (st[k] && st[k][0]) || {};
+              return { id: k, name: m.name, city: m.city, bg: m.bg, fg: m.fg, admin: !!m.host };
+            }));
+          }).subscribe(function (status) {
+            if (status === 'SUBSCRIBED' && !dead) {
+              ch.track({ name: me.name, city: me.city, bg: me.bg, fg: me.fg, host: !!me.host });
+            }
+          });
+        })(0);
+        return function () {
+          dead = true;
+          if (ch) { try { client.removeChannel(ch); } catch (e) {} }
+        };
       },
 
       notice: function (room) {

@@ -197,6 +197,7 @@
   }
 
   /* ── the channel ──────────────────────────────────────────────── */
+  var gen = 0;
   function ensure(ab) {
     var c = client();
     if (!c) return false;
@@ -204,17 +205,34 @@
     teardown();
     room = ab;
     subscribed = false;
-    chan = c.channel('voice:' + ab, {
-      config: { presence: { key: myId }, broadcast: { self: false } }
-    });
-    chan.on('presence', { event: 'sync' }, emit);
-    chan.on('broadcast', { event: 'sig' }, function (m) { onSig(m.payload); });
-    chan.subscribe(function (status) {
-      if (status !== 'SUBSCRIBED') return;
-      subscribed = true;
-      if (pendingTrack) { chan.track(localMeta); pendingTrack = false; }
-      emit();
-    });
+    var my = ++gen;
+    var full = 'realtime:voice:' + ab;
+    /* The client hands every caller of a name the SAME channel object —
+       including one still saying goodbye after a room switch. Joining that
+       half-dead instance made presence one-directional: she saw me, I
+       never saw her. Wait until the name is truly free, then start clean. */
+    (function whenFree(tries) {
+      if (my !== gen) return;                     // switched again meanwhile
+      var stale = (c.getChannels ? c.getChannels() : []).find(function (x) {
+        return x.topic === full;
+      });
+      if (stale && tries < 40) {
+        try { c.removeChannel(stale).catch(function () {}); } catch (e) {}
+        setTimeout(function () { whenFree(tries + 1); }, 50);
+        return;
+      }
+      chan = c.channel('voice:' + ab, {
+        config: { presence: { key: myId }, broadcast: { self: false } }
+      });
+      chan.on('presence', { event: 'sync' }, emit);
+      chan.on('broadcast', { event: 'sig' }, function (m) { onSig(m.payload); });
+      chan.subscribe(function (status) {
+        if (status !== 'SUBSCRIBED' || my !== gen) return;
+        subscribed = true;
+        if (pendingTrack) { chan.track(localMeta); pendingTrack = false; }
+        emit();
+      });
+    })(0);
     return true;
   }
 

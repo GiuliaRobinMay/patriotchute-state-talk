@@ -13,7 +13,7 @@ addEventListener('error', function (e) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<title>State Rooms</title>
+<title>Patriot State Talks</title>
 <meta name="description" content="A room for every state. Join, pick yours, and talk to people close by.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%23101B33'/><path d='M50 14 L84 26 L84 60 L50 86 L16 60 L16 26 Z' fill='%23BF3B2E'/></svg>">
 <link rel="stylesheet" href="app.css">
@@ -30,7 +30,7 @@ addEventListener('error', function (e) {
 
   <!-- Shown while the app works out who you are, so the sign-in screen
        never flashes at people who are already signed in. -->
-  <div class="bootscreen" id="boot"><span class="shield">SR</span></div>
+  <div class="bootscreen" id="boot"><span class="shield">PS</span></div>
 
   <!-- ── JOIN ── -->
   <section class="view" id="vJoin" aria-label="Join">
@@ -147,7 +147,7 @@ addEventListener('error', function (e) {
             <div class="earGrid" id="stageEars"></div>
           </div>
           <div id="upWrap" hidden>
-            <div class="tlab">Upcoming gatherings</div>
+            <div class="tlab">State Talk Times</div>
             <div class="ups" id="upList"></div>
           </div>
           <div class="talkctl">
@@ -260,7 +260,7 @@ addEventListener('error', function (e) {
           <textarea id="aBody" placeholder="A sentence or two. Keep it short — it sits above the conversation."></textarea>
         </div>
         <div class="f">
-          <label for="aWhen">Gather moment <span style="text-transform:none;letter-spacing:0">— optional</span></label>
+          <label for="aWhen">State Talk Time <span style="text-transform:none;letter-spacing:0">— optional</span></label>
           <input id="aWhen" type="datetime-local">
           <label class="chkrow"><input type="checkbox" id="aRepeat"> Repeats weekly</label>
           <p class="hint">Set a time and the notice becomes an invitation — each member sees it in their own timezone.</p>
