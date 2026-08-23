@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 52';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 53';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   var db = window.DB;
@@ -1453,7 +1453,7 @@
     var names = [];
     speakers.forEach(function (p) {
       var w = document.createElement('span');
-      w.className = 'w' + (p.talking ? ' talk' : '');
+      w.className = 'w' + (p.talking ? ' talk' : '') + (p.muted ? ' muted' : '');
       var ring = document.createElement('span'); ring.className = 'ring';
       var av = document.createElement('span'); av.className = 'av sm' + (p.admin ? ' admring' : '');
       avatar(av, voiceFace(p));
@@ -1484,7 +1484,7 @@
     }
     speakers.forEach(function (p) {
       var d = document.createElement('div');
-      d.className = 'spk2' + (p.talking ? ' talk' : '');
+      d.className = 'spk2' + (p.talking ? ' talk' : '') + (p.muted ? ' muted' : '');
       var avw = document.createElement('span'); avw.className = 'avw';
       var ring = document.createElement('span'); ring.className = 'ring';
       var av = document.createElement('span'); av.className = 'av' + (p.admin ? ' admring' : '');
@@ -1494,6 +1494,11 @@
       if (p.you) { var bb = document.createElement('b'); bb.textContent = 'You'; nm.appendChild(bb); }
       else nm.textContent = p.name;
       if (p.admin) nm.appendChild(adminStar());
+      if (p.muted) {
+        var mk = document.createElement('span');
+        mk.className = 'mutemark'; mk.textContent = ' 🔇'; mk.title = 'Muted — still listening';
+        nm.appendChild(mk);
+      }
       d.appendChild(avw); d.appendChild(nm);
       stage.appendChild(d);
     });
@@ -1642,7 +1647,7 @@
   }
 
   function leaveVoice() {
-    if (window.Voice && window.Voice.active()) window.Voice.leave();
+    if (window.Voice && window.Voice.active()) window.Voice.leave(talkOpen);
     if (micStream) micStream.getTracks().forEach(function (t) { t.stop(); });
     micStream = null;
     inCall = false;
@@ -1663,6 +1668,17 @@
       micStream.getAudioTracks().forEach(function (t) { t.enabled = !muted; });
     }
   };
+
+  /* A phone silences page audio when the mic stops, the screen locks, or
+     the tab goes to the back. Every return to the page is a chance to
+     start it playing again — none of them cost anything when it already is. */
+  function wakeAudio() { if (window.Voice && window.Voice.resume) window.Voice.resume(); }
+  ['click', 'touchend', 'focus'].forEach(function (ev) {
+    window.addEventListener(ev, wakeAudio, true);
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) wakeAudio();
+  });
 
   micBtn.onclick = function () { showTalk(true); };
   micBtn.textContent = '🎙 Open the Live Room';

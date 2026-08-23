@@ -50,6 +50,7 @@
         bg: meta.bg, fg: meta.fg,
         uid: meta.uid || '',
         admin: !!meta.host,
+        muted: !!meta.muted,
         role: role,
         talking: role === 'mic' &&
           (k === myId ? localTalking : !!(peers[k] && peers[k].talking))
@@ -60,8 +61,12 @@
       return a.you ? -1 : b.you ? 1 : 0;
     });
 
-    /* A role change means the pair's wiring is wrong now — rebuild it. */
+    /* A role change means the pair's wiring is wrong now — rebuild it.
+       Except for a pair still being built: presence syncs arrive in the
+       middle of a handshake, and dropping there is how a good connection
+       destroys itself moments after coming up. */
     Object.keys(peers).forEach(function (id) {
+      if (Date.now() - (peers[id].born || 0) < 2000) return;
       if (roles[id] && newRoles[id] && roles[id] !== newRoles[id]) drop(id);
     });
     roles = newRoles;
@@ -91,7 +96,21 @@
     }
     pc.onicecandidate = function (e) { if (e.candidate) send(id, 'ice', e.candidate); };
     pc.ontrack = function (e) { attach(id, e.streams[0]); };
-    peers[id] = { pc: pc, talking: false };
+    /* Phones roam between wifi and cellular mid-sentence. When a pair
+       gives up, drop it and let the next presence sync rebuild it. */
+    pc.oniceconnectionstatechange = function () {
+      var st = pc.iceConnectionState;
+      if (st !== 'failed' && st !== 'disconnected') return;
+      setTimeout(function () {
+        var e2 = peers[id];
+        if (!e2 || e2.pc !== pc) return;
+        var now = pc.iceConnectionState;
+        if (now !== 'failed' && now !== 'disconnected') return;
+        drop(id);
+        emit();
+      }, 4000);
+    };
+    peers[id] = { pc: pc, talking: false, born: Date.now() };
     startLoop();
     return pc;
   }
@@ -111,7 +130,11 @@
     if (!myRole || !p || p.to !== myId) return;
     var entry = peers[p.from];
     if (p.kind === 'offer') {
-      var pc = entry ? entry.pc : makePc(p.from);
+      /* An offer for a pair we already hold means the other side rebuilt
+         theirs — feeding a live connection a fresh offer half-applies and
+         leaves audio flowing one way only. Start clean instead. */
+      if (entry) { drop(p.from); entry = null; }
+      var pc = makePc(p.from);
       pc.setRemoteDescription(new RTCSessionDescription(p.data)).then(function () {
         return pc.createAnswer();
       }).then(function (answer) {
@@ -133,16 +156,37 @@
       payload: { to: to, from: myId, kind: kind, data: data } });
   }
 
-  /* ── hearing them, and seeing that they speak ─────────────────── */
+  /* ── hearing them, and seeing that they speak ───────────────────
+     Hearing must never depend on the microphone. A detached `new Audio()`
+     rides whatever audio session the page happens to have, which on a
+     phone is the one the microphone opened — so muting or leaving the mic
+     took people's hearing away with it. Real elements, in the page, that
+     keep playing on their own. */
+  var sink = null;
+  function audioSink() {
+    if (sink && sink.parentNode) return sink;
+    sink = document.createElement('div');
+    sink.setAttribute('aria-hidden', 'true');
+    sink.style.cssText = 'position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden';
+    document.body.appendChild(sink);
+    return sink;
+  }
+
   function attach(id, stream) {
     var entry = peers[id];
     if (!entry) return;
     if (!entry.audio) {
-      entry.audio = new Audio();
-      entry.audio.autoplay = true;
+      var a = document.createElement('audio');
+      a.autoplay = true;
+      a.setAttribute('playsinline', '');    // iOS refuses to play without it
+      a.playsInline = true;
+      a.controls = false;
+      a.volume = 1;
+      audioSink().appendChild(a);
+      entry.audio = a;
     }
     entry.audio.srcObject = stream;
-    entry.audio.play().catch(function () {});   // entering was a click, so allowed
+    play(entry.audio);
     var AC = window.AudioContext || window.webkitAudioContext;
     if (AC && !entry.ctx) {
       entry.ctx = new AC();
@@ -151,6 +195,24 @@
       entry.an.fftSize = 512;
       src.connect(entry.an);
     }
+  }
+
+  function play(el) {
+    if (!el) return;
+    var p = el.play();
+    if (p && p.catch) p.catch(function () {});   // retried by resume()
+  }
+
+  /* Called whenever the audio ground may have shifted under us: the
+     microphone stopping, the tab coming back, or any tap on the page. */
+  function resume() {
+    Object.keys(peers).forEach(function (id) {
+      var e = peers[id];
+      if (e.audio && e.audio.paused) play(e.audio);
+      if (e.ctx && e.ctx.state === 'suspended') {
+        try { e.ctx.resume(); } catch (x) {}
+      }
+    });
   }
 
   function level(an) {
@@ -183,7 +245,13 @@
     var entry = peers[id];
     if (!entry) return;
     try { entry.pc.close(); } catch (e) {}
-    try { if (entry.audio) { entry.audio.pause(); entry.audio.srcObject = null; } } catch (e) {}
+    try {
+      if (entry.audio) {
+        entry.audio.pause();
+        entry.audio.srcObject = null;
+        if (entry.audio.parentNode) entry.audio.parentNode.removeChild(entry.audio);
+      }
+    } catch (e) {}
     try { if (entry.ctx) entry.ctx.close(); } catch (e) {}
     delete peers[id];
   }
@@ -319,23 +387,48 @@
       startLoop();
     },
 
-    leave: function () {
+    /* Stepping off the mic is not leaving the room: the pairs that carry
+       other people's voices stay exactly as they are, and only our own
+       sending stops. Stopping the microphone ends the phone's recording
+       session, which is the moment playback needs a nudge to carry on
+       under the new one. */
+    leave: function (stayListening) {
       if (myRole !== 'mic') return;
-      myRole = null;
-      dropAll();
-      stopLocalAudio();
-      localMeta = null;
       stopMicPulse(room);
-      try { if (chan) chan.untrack(); } catch (e) {}
+      if (stayListening === false) {
+        myRole = null;
+        dropAll();
+        stopLocalAudio();
+        localMeta = null;
+        try { if (chan) chan.untrack(); } catch (e) {}
+        emit();
+        return;
+      }
+      myRole = 'listen';
+      /* Our pairs were built around a microphone; without one they must be
+         rebuilt — but only the ones that were only ever carrying us. */
+      Object.keys(peers).forEach(function (id) {
+        if (roles[id] !== 'mic') drop(id);      // listener-to-listener: nothing left to carry
+      });
+      stopLocalAudio();
+      if (localMeta) { localMeta.role = 'listen'; localMeta.muted = false; }
+      announce();
       emit();
+      setTimeout(resume, 250);
+      setTimeout(resume, 1200);
     },
 
     setMuted: function (m) {
       if (!localStream) return;
       localStream.getAudioTracks().forEach(function (t) { t.enabled = !m; });
+      /* Muting silences what we send. It never touches what we hear —
+         and the room gets to see who is quiet on purpose. */
+      if (localMeta) { localMeta.muted = !!m; announce(); }
+      resume();
     },
 
     active: function () { return myRole === 'mic'; },
-    present: function () { return !!myRole; }
+    present: function () { return !!myRole; },
+    resume: resume
   };
 })();

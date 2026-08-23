@@ -594,3 +594,8 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
 .rbar button:hover{color:var(--red2)}
 
 .memrow .t .n .tagb.wrn{background:rgba(192,138,62,.16);color:var(--gold);border:1px solid var(--gold)}
+
+/* someone on the mic with their microphone off — present, silent, listening */
+.mics .w.muted .av,.spk2.muted .avw{opacity:.5}
+.spk2.muted .ring{display:none}
+.mutemark{font-size:11px;opacity:.75}
