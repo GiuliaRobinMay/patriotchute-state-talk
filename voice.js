@@ -32,6 +32,7 @@
   var rafOn = false;
 
   var RTC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+  var emoteCb = function () {};
 
   function client() { return window.__sbClient || null; }
 
@@ -51,6 +52,8 @@
         uid: meta.uid || '',
         admin: !!meta.host,
         muted: !!meta.muted,
+        hand: !!meta.hand,
+        since: meta.since || 0,
         role: role,
         talking: role === 'mic' &&
           (k === myId ? localTalking : !!(peers[k] && peers[k].talking))
@@ -58,8 +61,14 @@
     });
     list.sort(function (a, b) {
       if (a.role !== b.role) return a.role === 'mic' ? -1 : 1;
-      return a.you ? -1 : b.you ? 1 : 0;
+      if (a.role === 'listen' && a.hand !== b.hand) return a.hand ? -1 : 1;
+      if (a.since !== b.since) return a.since - b.since;
+      return a.id < b.id ? -1 : 1;
     });
+    /* the first to take the mic runs the room */
+    for (var f = 0; f < list.length; f++) {
+      if (list[f].role === 'mic') { list[f].moderator = true; break; }
+    }
 
     /* A role change means the pair's wiring is wrong now — rebuild it.
        Except for a pair still being built: presence syncs arrive in the
@@ -294,6 +303,10 @@
       });
       chan.on('presence', { event: 'sync' }, emit);
       chan.on('broadcast', { event: 'sig' }, function (m) { onSig(m.payload); });
+      chan.on('broadcast', { event: 'emote' }, function (m) {
+        var p = m.payload || {};
+        if (p.from && p.emoji) emoteCb(p.from, p.emoji);
+      });
       chan.subscribe(function (status) {
         if (status !== 'SUBSCRIBED' || my !== gen) return;
         subscribed = true;
@@ -352,7 +365,7 @@
 
     listen: function (ab, who) {
       if (myRole === 'mic') return;      // already louder than a listener
-      localMeta = { name: who.name, bg: who.bg, fg: who.fg, host: !!who.host, uid: who.id || '', role: 'listen' };
+      localMeta = { name: who.name, bg: who.bg, fg: who.fg, host: !!who.host, uid: who.id || '', role: 'listen', since: Date.now(), hand: false };
       myRole = 'listen';
       if (!ensure(ab)) return;
       announce();
@@ -369,7 +382,7 @@
 
     join: function (ab, who, stream) {
       localStream = stream;
-      localMeta = { name: who.name, bg: who.bg, fg: who.fg, host: !!who.host, uid: who.id || '', role: 'mic' };
+      localMeta = { name: who.name, bg: who.bg, fg: who.fg, host: !!who.host, uid: who.id || '', role: 'mic', since: Date.now(), hand: false };
       var AC = window.AudioContext || window.webkitAudioContext;
       if (AC) {
         localCtx = new AC();
@@ -427,6 +440,28 @@
       resume();
     },
 
+    /* A raised hand rides on presence, so everyone sees it at once. */
+    setHand: function (up) {
+      if (!localMeta) return;
+      localMeta.hand = !!up;
+      announce();
+      emit();
+    },
+    handUp: function () { return !!(localMeta && localMeta.hand); },
+
+    /* A flying emoji: broadcast to the room, and shown at home too,
+       since the room's own send is not echoed back. */
+    emote: function (emoji) {
+      if (!chan || !myRole) return;
+      try {
+        chan.send({ type: 'broadcast', event: 'emote',
+          payload: { from: myId, emoji: emoji } });
+      } catch (e) {}
+      emoteCb(myId, emoji);
+    },
+    onEmote: function (cb) { emoteCb = cb || function () {}; },
+
+    myKey: function () { return myId; },
     active: function () { return myRole === 'mic'; },
     present: function () { return !!myRole; },
     resume: resume

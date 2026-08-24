@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 53';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 54';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   var db = window.DB;
@@ -1454,6 +1454,7 @@
     speakers.forEach(function (p) {
       var w = document.createElement('span');
       w.className = 'w' + (p.talking ? ' talk' : '') + (p.muted ? ' muted' : '');
+      w.dataset.vid = p.id;
       var ring = document.createElement('span'); ring.className = 'ring';
       var av = document.createElement('span'); av.className = 'av sm' + (p.admin ? ' admring' : '');
       avatar(av, voiceFace(p));
@@ -1485,7 +1486,9 @@
     speakers.forEach(function (p) {
       var d = document.createElement('div');
       d.className = 'spk2' + (p.talking ? ' talk' : '') + (p.muted ? ' muted' : '');
+      d.dataset.vid = p.id;
       var avw = document.createElement('span'); avw.className = 'avw';
+      if (p.hand) { var hs = document.createElement('span'); hs.className = 'handup'; hs.textContent = '✋'; avw.appendChild(hs); }
       var ring = document.createElement('span'); ring.className = 'ring';
       var av = document.createElement('span'); av.className = 'av' + (p.admin ? ' admring' : '');
       avatar(av, voiceFace(p));
@@ -1500,8 +1503,20 @@
         nm.appendChild(mk);
       }
       d.appendChild(avw); d.appendChild(nm);
+      if (p.moderator) {
+        var mo = document.createElement('span');
+        mo.className = 'modchip'; mo.textContent = 'MODERATOR';
+        d.appendChild(mo);
+      }
       stage.appendChild(d);
     });
+
+    var hb = $('handBtn');
+    if (hb && window.Voice) {
+      var up = window.Voice.handUp && window.Voice.handUp();
+      hb.textContent = up ? '✋ Lower hand' : '✋ Raise hand';
+      hb.classList.toggle('up', !!up);
+    }
 
     var earBox = $('stageEars');
     earBox.textContent = '';
@@ -1514,7 +1529,9 @@
     }
     ears.forEach(function (p) {
       var d = document.createElement('div');
-      d.className = 'ear';
+      d.className = 'ear' + (p.hand ? ' asking' : '');
+      d.dataset.vid = p.id;
+      if (p.hand) { var hs = document.createElement('span'); hs.className = 'handup'; hs.textContent = '✋'; d.appendChild(hs); }
       var av = document.createElement('span'); av.className = 'av' + (p.admin ? ' admring' : '');
       avatar(av, voiceFace(p));
       var nm = document.createElement('span'); nm.className = 'nm';
@@ -1682,6 +1699,47 @@
 
   micBtn.onclick = function () { showTalk(true); };
   micBtn.textContent = '🎙 Open the Live Room';
+
+  $('handBtn').onclick = function () {
+    if (!window.Voice || !window.Voice.present()) return;
+    window.Voice.setHand(!window.Voice.handUp());
+  };
+
+  /* One emoji per beat: enthusiasm, not spam. */
+  var lastEmote = 0;
+  [].slice.call(document.querySelectorAll('#reactRow [data-e]')).forEach(function (b) {
+    b.onclick = function () {
+      if (!window.Voice || !window.Voice.present()) return;
+      var now = Date.now();
+      if (now - lastEmote < 700) return;
+      lastEmote = now;
+      window.Voice.emote(b.dataset.e);
+    };
+  });
+
+  /* An emoji flies up from its sender's circle, wherever that circle is
+     drawn — the stage, the listeners, or the strip above the chat. It
+     flies in its own layer, pinned to the circle's spot on screen, so the
+     stage redrawing underneath (which presence does constantly) can't
+     swat it mid-flight. */
+  if (window.Voice && window.Voice.onEmote) {
+    window.Voice.onEmote(function (fromId, emoji) {
+      if (typeof emoji !== 'string' || emoji.length > 8) return;
+      var spots = document.querySelectorAll('[data-vid="' + fromId + '"]');
+      if (!spots.length) return;
+      [].slice.call(spots).forEach(function (spot) {
+        var r = spot.getBoundingClientRect();
+        if (!r.width) return;
+        var f = document.createElement('span');
+        f.className = 'fly';
+        f.textContent = emoji;
+        f.style.left = (r.left + r.width / 2) + 'px';
+        f.style.top = (r.top + r.height * 0.3) + 'px';
+        document.body.appendChild(f);
+        setTimeout(function () { f.remove(); }, 2400);
+      });
+    });
+  }
 
   $('talkJoin').onclick = function () {
     if (inCall) { leaveVoice(); return; }

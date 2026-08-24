@@ -599,3 +599,33 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
 .mics .w.muted .av,.spk2.muted .avw{opacity:.5}
 .spk2.muted .ring{display:none}
 .mutemark{font-size:11px;opacity:.75}
+
+/* ── the stage's little language ── */
+/* the first on the mic runs the room, and everyone can see it */
+.modchip{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;color:var(--gold);
+  border:1px solid var(--gold);border-radius:4px;padding:1px 5px;margin-top:2px}
+/* a raised hand, pinned to the corner of the circle */
+.spk2 .avw,.ear{position:relative}
+.handup{position:absolute;top:-8px;right:-8px;font-size:15px;z-index:3;
+  filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));animation:handwave 1.6s ease-in-out infinite}
+.ear.asking .av{box-shadow:0 0 0 2.5px var(--gold)}
+@keyframes handwave{0%,100%{transform:rotate(0)}25%{transform:rotate(14deg)}75%{transform:rotate(-8deg)}}
+/* an emoji flying up from a circle — in its own fixed layer, so stage
+   redraws underneath cannot swat it mid-flight */
+.mics .w{position:relative}
+.fly{position:fixed;font-size:22px;pointer-events:none;z-index:80;
+  animation:flyup 2.2s ease-out forwards}
+@keyframes flyup{
+  0%{transform:translate(-50%,0) scale(.6);opacity:0}
+  12%{transform:translate(-50%,-14px) scale(1.2);opacity:1}
+  100%{transform:translate(-42%,-90px) scale(1);opacity:0}
+}
+/* the reaction row */
+.reactrow{display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:center;
+  padding:6px 0 0}
+.reactrow button{background:var(--panel);border:1px solid var(--line2);border-radius:18px;
+  font-size:17px;line-height:1;padding:6px 10px;cursor:pointer}
+.reactrow button:hover{border-color:var(--teal2);transform:translateY(-1px)}
+.reactrow .hand{font-size:12.5px;font-weight:700;color:var(--text);padding:8px 13px}
+.reactrow .hand.up{background:var(--redwash);border-color:var(--gold);color:var(--gold)}
+.reactrow .rsep{width:1px;height:20px;background:var(--line2);margin:0 5px}
