@@ -252,3 +252,11 @@ do $$ begin
   alter publication supabase_realtime add table reactions;
 exception when duplicate_object then null;
 end $$;
+
+-- ── the owner outranks everyone in a Live Room (build 55) ─────────
+-- One account wears the crown: rooms they speak in always show them as
+-- moderator. Set it once (adjust the name):
+--
+--   update profiles set is_owner = true where name = 'Chas';
+--
+alter table profiles add column if not exists is_owner boolean not null default false;

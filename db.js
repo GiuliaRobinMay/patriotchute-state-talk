@@ -149,9 +149,20 @@
     function pulseCount(ab) {
       return Object.keys(pulseSeen[ab] || {}).length;
     }
+    /* Who fronts the room, from the beats alone: the beat carrying a topic
+       wins; otherwise the earliest speaker. */
+    function pulseInfo(ab) {
+      var seen = pulseSeen[ab] || {}, best = null;
+      Object.keys(seen).forEach(function (id) {
+        var e = seen[id];
+        if (!e || typeof e !== 'object') return;
+        if (!best || (e.topic && !best.topic) || (!!e.topic === !!best.topic && e.t < best.t)) best = e;
+      });
+      return { name: (best && best.name) || '', topic: (best && best.topic) || '' };
+    }
     function pulseNotify(ab) {
-      var n = pulseCount(ab);
-      pulseCbs.slice().forEach(function (f) { f(ab, n); });
+      var n = pulseCount(ab), info = pulseInfo(ab);
+      pulseCbs.slice().forEach(function (f) { f(ab, n, info); });
     }
     function hereCount(ab, skipId) {
       var seen = hereSeen[ab] || {}, n = 0;
@@ -169,7 +180,7 @@
         if (!p.room || !p.id) return;
         var seen = pulseSeen[p.room] = pulseSeen[p.room] || {};
         if (p.off) delete seen[p.id];
-        else seen[p.id] = Date.now();
+        else seen[p.id] = { t: Date.now(), name: p.name || '', topic: p.topic || '' };
         pulseNotify(p.room);
       });
       /* The same channel also carries a quieter beat: "I have this room
@@ -190,7 +201,8 @@
         Object.keys(pulseSeen).forEach(function (ab) {
           var seen = pulseSeen[ab], cut = Date.now() - 12000, dropped = false;
           Object.keys(seen).forEach(function (id) {
-            if (seen[id] < cut) { delete seen[id]; dropped = true; }
+            var t = (seen[id] && seen[id].t) || seen[id];
+            if (t < cut) { delete seen[id]; dropped = true; }
           });
           if (dropped) pulseNotify(ab);
         });
@@ -291,7 +303,8 @@
               return {
                 id: uid, name: p.data.name, city: p.data.city, state: p.data.state,
                 bg: p.data.bg, fg: p.data.fg, photo: p.data.photo,
-                email: p.data.email, host: p.data.is_host, banned: p.data.banned
+                email: p.data.email, host: p.data.is_host, banned: p.data.banned,
+                owner: !!p.data.is_owner
               };
             });
         });
@@ -403,6 +416,7 @@
           if (r.error) throw r.error;
           p.id = uid;
           p.host = !!(r.data && r.data.is_host);
+          p.owner = !!(r.data && r.data.is_owner);
           return p;
         }
         return client.from('profiles')
@@ -747,9 +761,9 @@
           chans.push(mch);
         }
         if (hooks.onVoice) {
-          hooks.onVoice(pulseCount(ab));
-          offPulse = watchPulse(function (room, mics) {
-            if (room === ab) hooks.onVoice(mics);
+          hooks.onVoice(pulseCount(ab), pulseInfo(ab));
+          offPulse = watchPulse(function (room, mics, info) {
+            if (room === ab) hooks.onVoice(mics, info);
           });
         }
         return function () {
@@ -798,17 +812,21 @@
       },
 
       peekVoiceMany: function (abs, cb) {
-        abs.forEach(function (ab) { cb(ab, pulseCount(ab)); });
-        return watchPulse(function (room, mics) {
-          if (abs.indexOf(room) > -1) cb(room, mics);
+        abs.forEach(function (ab) { cb(ab, pulseCount(ab), pulseInfo(ab)); });
+        return watchPulse(function (room, mics, info) {
+          if (abs.indexOf(room) > -1) cb(room, mics, info);
         });
       },
 
       /* Speakers call this every few seconds while their mic is live. */
-      micPulse: function (ab, id, off) {
+      micPulse: function (ab, id, off, extra) {
         try {
-          pulseChannel().send({ type: 'broadcast', event: 'mic',
-            payload: { room: ab, id: id, off: !!off } });
+          var pay = { room: ab, id: id, off: !!off };
+          if (extra) {
+            if (extra.name) pay.name = String(extra.name).slice(0, 40);
+            if (extra.topic) pay.topic = String(extra.topic).slice(0, 80);
+          }
+          pulseChannel().send({ type: 'broadcast', event: 'mic', payload: pay });
         } catch (e) {}
       },
 

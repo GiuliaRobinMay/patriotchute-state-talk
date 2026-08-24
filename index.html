@@ -119,6 +119,8 @@ addEventListener('error', function (e) {
           <button type="button" id="tabTalk" role="tab" aria-selected="false">🎙 Live Room<span class="livedot" id="talkLive" hidden></span></button>
         </div>
 
+        <button class="livebanner" type="button" id="liveBanner" hidden></button>
+
         <div class="notice" id="notice" hidden>
           <div class="nb">
             <div class="nf" id="nFrom"></div>
@@ -138,6 +140,11 @@ addEventListener('error', function (e) {
         </div>
 
         <div class="talk" id="vTalk" hidden>
+          <div class="ttopic" id="talkTopic" hidden></div>
+          <div class="topicrow" id="topicRow" hidden>
+            <input id="topicIn" type="text" maxlength="80" placeholder="What's this talk about? (optional)">
+            <button class="btn g" type="button" id="topicSet">Set topic</button>
+          </div>
           <div>
             <div class="tlab">On the mic · <span id="stageN">0</span></div>
             <div class="stage" id="stageMics"></div>

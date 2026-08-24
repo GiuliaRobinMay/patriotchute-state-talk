@@ -53,6 +53,9 @@
         admin: !!meta.host,
         muted: !!meta.muted,
         hand: !!meta.hand,
+        rank: meta.rank || 0,
+        claim: meta.claim || 0,
+        topic: meta.topic || '',
         since: meta.since || 0,
         role: role,
         talking: role === 'mic' &&
@@ -65,10 +68,20 @@
       if (a.since !== b.since) return a.since - b.since;
       return a.id < b.id ? -1 : 1;
     });
-    /* the first to take the mic runs the room */
-    for (var f = 0; f < list.length; f++) {
-      if (list[f].role === 'mic') { list[f].moderator = true; break; }
-    }
+    /* Who runs the room: the owner outranks admins outranks members.
+       Within a rank, the one holding the room's claim (its opener, or
+       whoever the opener handed it to), then the longest on the mic.
+       The chip moves; the seats never do. */
+    var mod = null;
+    list.forEach(function (p) {
+      if (p.role !== 'mic') return;
+      if (!mod) { mod = p; return; }
+      if (p.rank !== mod.rank) { if (p.rank > mod.rank) mod = p; return; }
+      if (!!p.claim !== !!mod.claim) { if (p.claim) mod = p; return; }
+      if (p.claim && mod.claim && p.claim !== mod.claim) { if (p.claim < mod.claim) mod = p; return; }
+      if (p.since < mod.since) mod = p;
+    });
+    if (mod) mod.moderator = true;
 
     /* A role change means the pair's wiring is wrong now — rebuild it.
        Except for a pair still being built: presence syncs arrive in the
@@ -307,6 +320,13 @@
         var p = m.payload || {};
         if (p.from && p.emoji) emoteCb(p.from, p.emoji);
       });
+      chan.on('broadcast', { event: 'modpass' }, function (m) {
+        var p = m.payload || {};
+        if (p.to !== myId || myRole !== 'mic' || !localMeta) return;
+        localMeta.claim = p.claim || Date.now();
+        localMeta.topic = p.topic || '';
+        announce();
+      });
       chan.subscribe(function (status) {
         if (status !== 'SUBSCRIBED' || my !== gen) return;
         subscribed = true;
@@ -339,7 +359,14 @@
   function startMicPulse(ab) {
     stopMicPulse(null);
     function beat() {
-      try { if (window.DB && window.DB.micPulse) window.DB.micPulse(ab, myId); } catch (e) {}
+      try {
+        if (window.DB && window.DB.micPulse) {
+          window.DB.micPulse(ab, myId, false, {
+            name: (localMeta && localMeta.name) || '',
+            topic: (localMeta && localMeta.claim && localMeta.topic) || ''
+          });
+        }
+      } catch (e) {}
     }
     beat();
     pulseIv = setInterval(beat, 4000);
@@ -365,7 +392,7 @@
 
     listen: function (ab, who) {
       if (myRole === 'mic') return;      // already louder than a listener
-      localMeta = { name: who.name, bg: who.bg, fg: who.fg, host: !!who.host, uid: who.id || '', role: 'listen', since: Date.now(), hand: false };
+      localMeta = { name: who.name, bg: who.bg, fg: who.fg, host: !!who.host, rank: who.owner ? 2 : who.host ? 1 : 0, uid: who.id || '', role: 'listen', since: Date.now(), hand: false, claim: 0, topic: '' };
       myRole = 'listen';
       if (!ensure(ab)) return;
       announce();
@@ -381,8 +408,20 @@
     },
 
     join: function (ab, who, stream) {
+      /* Nobody else on the mic means this person is opening the room. */
+      var prevClaim = 0, prevTopic = '';
+      try {
+        var st0 = chan ? chan.presenceState() : {};
+        var micsNow = Object.keys(st0).filter(function (k) {
+          if (k === myId) return false;
+          var m0 = (st0[k] && st0[k][0]) || {};
+          return (m0.role || 'mic') === 'mic';
+        }).length;
+        if (micsNow === 0) prevClaim = Date.now();
+      } catch (e) {}
+      if (localMeta && localMeta.claim) { prevClaim = localMeta.claim; prevTopic = localMeta.topic || ''; }
       localStream = stream;
-      localMeta = { name: who.name, bg: who.bg, fg: who.fg, host: !!who.host, uid: who.id || '', role: 'mic', since: Date.now(), hand: false };
+      localMeta = { name: who.name, bg: who.bg, fg: who.fg, host: !!who.host, rank: who.owner ? 2 : who.host ? 1 : 0, uid: who.id || '', role: 'mic', since: Date.now(), hand: false, claim: prevClaim, topic: prevTopic };
       var AC = window.AudioContext || window.webkitAudioContext;
       if (AC) {
         localCtx = new AC();
@@ -418,6 +457,7 @@
         return;
       }
       myRole = 'listen';
+      if (localMeta) { localMeta.claim = 0; localMeta.topic = ''; }
       /* Our pairs were built around a microphone; without one they must be
          rebuilt — but only the ones that were only ever carrying us. */
       Object.keys(peers).forEach(function (id) {
@@ -438,6 +478,28 @@
          and the room gets to see who is quiet on purpose. */
       if (localMeta) { localMeta.muted = !!m; announce(); }
       resume();
+    },
+
+    hasClaim: function () { return !!(localMeta && localMeta.claim); },
+    topic: function () { return (localMeta && localMeta.topic) || ''; },
+    setTopic: function (t) {
+      if (!localMeta || !localMeta.claim) return;
+      localMeta.topic = String(t || '').slice(0, 80);
+      announce();
+      emit();
+    },
+    passModerator: function (toId) {
+      if (!chan || !localMeta || myRole !== 'mic') return;
+      var claim = localMeta.claim || Date.now();
+      var topic = localMeta.topic || '';
+      try {
+        chan.send({ type: 'broadcast', event: 'modpass',
+          payload: { to: toId, claim: claim, topic: topic } });
+      } catch (e) {}
+      localMeta.claim = 0;
+      localMeta.topic = '';
+      announce();
+      emit();
     },
 
     /* A raised hand rides on presence, so everyone sees it at once. */

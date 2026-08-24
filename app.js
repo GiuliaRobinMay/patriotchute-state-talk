@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 54';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 55';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   var db = window.DB;
@@ -187,6 +187,41 @@
       if (had !== (n > 0)) drawRail();
     });
   }
+
+  /* The banner that says something is happening in All USA right now —
+     shown in every room except All USA itself. */
+  var stopUsWatch = null, usLive = 0, usInfo = null;
+  function drawLiveBanner() {
+    var b = $('liveBanner');
+    var show = usLive > 0 && room.a !== 'US';
+    b.hidden = !show;
+    if (!show) return;
+    b.textContent = '';
+    var mic = document.createElement('b'); mic.textContent = '🎙 LIVE in All USA';
+    b.appendChild(mic);
+    var rest = ' — ';
+    if (usInfo && usInfo.topic) rest += '“' + usInfo.topic + '”';
+    if (usInfo && usInfo.name) rest += (usInfo.topic ? ' with ' : '') + usInfo.name;
+    if (rest === ' — ') rest = ' — a State Talk is on';
+    var sp = document.createElement('span'); sp.textContent = rest + ' · tap to listen';
+    b.appendChild(sp);
+  }
+  function startUsWatch() {
+    if (stopUsWatch) stopUsWatch();
+    stopUsWatch = null;
+    usLive = 0; usInfo = null;
+    drawLiveBanner();
+    if (!db.shared || !me || room.a === 'US') return;
+    stopUsWatch = db.peekVoiceMany(['US'], function (ab, mics, info) {
+      usLive = mics;
+      usInfo = info || null;
+      drawLiveBanner();
+    });
+  }
+  $('liveBanner').onclick = function () {
+    openRoom(USA);
+    showTalk(true);
+  };
 
   /* Every member's app announces which room it has open, so admins can
      see life on the rail. Ends by itself when the app closes. */
@@ -600,6 +635,7 @@
     startPeek();
     startHostPulse();
     startHereBeat();
+    startUsWatch();
 
     loadChat();
     loadMembers();
@@ -1463,6 +1499,8 @@
       names.push(p.you ? 'you' : String(p.name).split(/\s+/)[0]);
     });
     var v = $('vNames');
+    var stripTopic = '';
+    speakers.forEach(function (p) { if (p.claim && p.topic && !stripTopic) stripTopic = p.topic; });
     if (!speakers.length) v.textContent = 'The Live Room is quiet — be the first on the mic';
     else if (speakers.length === 1) {
       v.textContent = speakers[0].you
@@ -1471,6 +1509,7 @@
     } else {
       v.textContent = names.join(', ') + ' are on the mic';
     }
+    if (stripTopic && speakers.length) v.textContent = '“' + stripTopic + '” · ' + v.textContent;
     $('muteBtn').hidden = !inCall;
 
     /* the stage (Live Room view) */
@@ -1508,6 +1547,17 @@
         mo.className = 'modchip'; mo.textContent = 'MODERATOR';
         d.appendChild(mo);
       }
+      /* the moderator can tap another speaker to hand them the room */
+      var meMod = lastVoiceList.some(function (x) { return x.you && x.moderator; });
+      if (meMod && !p.you && window.Voice && window.Voice.hasClaim && window.Voice.hasClaim()) {
+        d.classList.add('passable');
+        d.title = 'Make ' + p.name + ' the moderator';
+        d.onclick = function () {
+          ask('Hand the room to ' + p.name + '? They become the moderator.').then(function (ok) {
+            if (ok) window.Voice.passModerator(p.id);
+          });
+        };
+      }
       stage.appendChild(d);
     });
 
@@ -1516,6 +1566,30 @@
       var up = window.Voice.handUp && window.Voice.handUp();
       hb.textContent = up ? '✋ Lower hand' : '✋ Raise hand';
       hb.classList.toggle('up', !!up);
+    }
+
+    /* The talk's name, above the stage: whatever the room's claim holder
+       called it. The claim holder gets the input to (re)name it. */
+    var holder = null;
+    lastVoiceList.forEach(function (p) { if (p.claim && p.role !== 'listen') holder = holder || p; });
+    var tt = $('talkTopic');
+    if (tt) {
+      var mod2 = null;
+      lastVoiceList.forEach(function (p) { if (p.moderator) mod2 = p; });
+      var topicTxt = holder && holder.topic ? holder.topic : '';
+      tt.hidden = !topicTxt;
+      if (topicTxt) {
+        tt.textContent = '“' + topicTxt + '”' +
+          (mod2 ? ' — with ' + (mod2.you ? 'you' : mod2.name) : '');
+      }
+    }
+    var tr = $('topicRow');
+    if (tr && window.Voice) {
+      var canName = !!(window.Voice.hasClaim && window.Voice.hasClaim());
+      tr.hidden = !canName;
+      if (canName && document.activeElement !== $('topicIn')) {
+        $('topicIn').value = window.Voice.topic ? window.Voice.topic() : '';
+      }
     }
 
     var earBox = $('stageEars');
@@ -1699,6 +1773,14 @@
 
   micBtn.onclick = function () { showTalk(true); };
   micBtn.textContent = '🎙 Open the Live Room';
+
+  $('topicSet').onclick = function () {
+    if (window.Voice && window.Voice.setTopic) window.Voice.setTopic($('topicIn').value.trim());
+    toast('Topic set — the room and the live banner carry it now.');
+  };
+  $('topicIn').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); $('topicSet').click(); }
+  });
 
   $('handBtn').onclick = function () {
     if (!window.Voice || !window.Voice.present()) return;
