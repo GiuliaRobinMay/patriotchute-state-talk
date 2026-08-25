@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 55';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 56';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   var db = window.DB;
@@ -446,6 +446,11 @@
   $('googleBtn').onclick = function () {
     if (!framed) {
       saySigningIn('Opening Google…');
+      /* A voice pop-out that lands here unsigned loses its ?voice on the
+         Google round trip — leave it in this tab's pocket for the return. */
+      if (wantVoice) {
+        try { sessionStorage.setItem('stateRooms.voice', wantVoice); } catch (e) {}
+      }
       db.signInWithGoogle(location.origin + location.pathname).catch(function (err) {
         saySigningIn('✕ ' + ((err && err.message) || 'Could not start sign-in'), 'no');
       });
@@ -1428,6 +1433,11 @@
     return null;
   }
 
+  /* When set, the Live Room's big button says this instead of its usual
+     label — the strip's button is hidden in that view, so the pop-out's
+     outcome must be told where the finger actually is. */
+  var popNote = '';
+
   function popOut() {
     /* No 'noopener': it forces window.open to return null, which would make
        every successful pop-out look like a blocked one. */
@@ -1437,11 +1447,15 @@
       micBtn.className = 'jn err';
       micBtn.textContent = 'Allow pop-ups to talk';
       $('vNames').textContent = 'Your browser blocked the new tab — allow pop-ups for this site';
+      popNote = 'Pop-up blocked — allow pop-ups for this site, then tap again';
+      renderVoice(lastVoiceList);
       return;
     }
     micBtn.className = 'jn out';
     micBtn.textContent = '🎙 Talking in the other tab';
     $('vNames').textContent = 'Voice opened in its own tab — chat carries on here';
+    popNote = '🎙 Talking in the other tab';
+    renderVoice(lastVoiceList);
   }
 
   var inCall = false;
@@ -1489,7 +1503,7 @@
     var names = [];
     speakers.forEach(function (p) {
       var w = document.createElement('span');
-      w.className = 'w' + (p.talking ? ' talk' : '') + (p.muted ? ' muted' : '');
+      w.className = 'w' + (p.talking ? ' onair' : '') + (p.muted ? ' muted' : '');
       w.dataset.vid = p.id;
       var ring = document.createElement('span'); ring.className = 'ring';
       var av = document.createElement('span'); av.className = 'av sm' + (p.admin ? ' admring' : '');
@@ -1524,7 +1538,12 @@
     }
     speakers.forEach(function (p) {
       var d = document.createElement('div');
-      d.className = 'spk2' + (p.talking ? ' talk' : '') + (p.muted ? ' muted' : '');
+      /* 'onair', never 'talk': that word is the Live Room container's own
+         class, and a state class sharing it inherits the container's
+         flex/padding rules — the circle balloons to the middle of the
+         stage the moment its person speaks. The halo must be the ONLY
+         thing that changes. */
+      d.className = 'spk2' + (p.talking ? ' onair' : '') + (p.muted ? ' muted' : '');
       d.dataset.vid = p.id;
       var avw = document.createElement('span'); avw.className = 'avw';
       if (p.hand) { var hs = document.createElement('span'); hs.className = 'handup'; hs.textContent = '✋'; avw.appendChild(hs); }
@@ -1615,7 +1634,7 @@
     });
 
     $('talkJoin').textContent = inCall ? 'Leave the mic'
-      : (framed && micPermitted() === false ? '🎙 Open a tab to talk' : '🎙 Join the mic');
+      : popNote || (framed && micPermitted() !== true ? '🎙 Open a tab to talk' : '🎙 Join the mic');
     $('talkJoin').className = inCall ? 'btn g' : 'btn';
     $('talkMute').hidden = !inCall;
     updateSignals();
@@ -1824,12 +1843,20 @@
   }
 
   $('talkJoin').onclick = function () {
+    popNote = '';
     if (inCall) { leaveVoice(); return; }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       this.textContent = 'Voice not supported here';
+      toast('This browser can’t do voice — open this page in Safari or Chrome instead.');
       return;
     }
-    if (framed && micPermitted() === false) { popOut(); return; }
+    /* Inside the community's frame, only try the microphone here when the
+       browser POSITIVELY says the frame is allowed one. Phones (Safari,
+       and most mobile browsers) can't answer that question at all — and
+       asking anyway meant the pop-out happened after the refusal, outside
+       the tap, where mobile popup blockers silently eat the new tab. The
+       tab must open IN the tap itself. */
+    if (framed && micPermitted() !== true) { popOut(); return; }
     var btn = this;
     joinVoice().catch(function (err) {
       var name = (err && err.name) || 'Error';
@@ -2080,6 +2107,15 @@
 
   /* ── boot ────────────────────────────────────────────────────── */
   var wantVoice = (location.search.match(/[?&]voice=([A-Z]{2})/) || [])[1];
+  /* A pop-out tab that first has to visit Google loses its ?voice on the
+     way — the sign-in button stashes it (this tab only), and the return
+     trip picks it back up here. Read-and-remove, so it never goes stale. */
+  var stashedVoice = '';
+  try {
+    stashedVoice = sessionStorage.getItem('stateRooms.voice') || '';
+    sessionStorage.removeItem('stateRooms.voice');
+  } catch (e) {}
+  if (!wantVoice && !framed && /[?&#]code=/.test(ARRIVED)) wantVoice = stashedVoice || null;
   if (wantVoice && wantVoice !== 'US' && !window.STATES.some(function (x) { return x.a === wantVoice; })) wantVoice = null;
 
   /* Opened from the community to sign in: remember the secret and clean the
@@ -2212,7 +2248,15 @@
       openRoom(byAbbr(wantVoice || me.state));
       if (wantVoice && !framed) {
         showTalk(true);
-        joinVoice().catch(function () { leaveVoice(); });
+        /* Never grab the microphone unasked. Phones only hand it over —
+           and only let sound play at all — inside a real tap, so the tab
+           opens on one big question, and the tap that answers it is the
+           tap that joins. 'Cancel' still seats them as a listener, and
+           that same tap is what unlocks their speaker. */
+        ask('You’re in the ' + byAbbr(wantVoice).n + ' Live Room. Take the mic now? ' +
+            '(Cancel just listens.)').then(function (ok) {
+          if (ok) $('talkJoin').onclick.call($('talkJoin'));
+        });
       }
     } else if (db.hasSession() && healthy) {
       showProfileStep();          // signed in, but we don't know them yet
