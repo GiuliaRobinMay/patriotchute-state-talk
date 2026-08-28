@@ -21,6 +21,22 @@ window.STATES = [
   {n:"Wisconsin",a:"WI",seed:99},{n:"Wyoming",a:"WY",seed:7},{n:"Washington DC",a:"DC",seed:47}
 ];
 
+/* Members outside the States get a room of their own, listed under the
+   states as "Other countries". They work exactly like a state room: their
+   country ↔ All USA in the switcher, same chat, same Live Room.
+
+   `a` is the room's two-letter code — the database allows exactly two
+   characters, and it is never shown to anyone once a country carries a
+   flag. Canada cannot be CA: that is California. CN is Canada's code HERE
+   and nowhere else; do not read it as a country standard.
+
+   `f` is the flag shown instead of the code, and `sw` the short label for
+   the room switcher, where a long name would crowd a phone. */
+window.COUNTRIES = [
+  {n:"United Kingdom",a:"UK",f:"🇬🇧",sw:"🇬🇧 UK",seed:0},
+  {n:"Canada",        a:"CN",f:"🇨🇦",sw:"🇨🇦 Canada",seed:0}
+];
+
 /* Rooms shown as "live" in the preview. Replaced by real voice presence later. */
 window.LIVE_SEED = ["OH","TX","FL","PA","MI","NC","GA","AZ"];
 
@@ -51,7 +67,8 @@ window.CITIES = {
   VT:["Burlington","Montpelier","Rutland"], VA:["Richmond","Norfolk","Roanoke"],
   WA:["Seattle","Spokane","Tacoma"], WV:["Charleston","Huntington","Morgantown"],
   WI:["Milwaukee","Madison","Green Bay"], WY:["Cheyenne","Casper","Laramie"],
-  DC:["Washington","Georgetown","Anacostia"]
+  DC:["Washington","Georgetown","Anacostia"],
+  UK:["London","Manchester","Birmingham"], CN:["Toronto","Vancouver","Calgary"]
 };
 
 /* Avatar colours, paired so text stays legible on each. */

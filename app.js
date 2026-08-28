@@ -8,9 +8,14 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 56';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 57';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
+  /* The countries sit under the states everywhere the states are listed.
+     S is "the 51 US rooms"; ROOMS is "every room a person can belong to",
+     which is what lookups, rails, pulses and pickers all want. */
+  var C = window.COUNTRIES || [];
+  var ROOMS = S.concat(C);
   var db = window.DB;
 
   /* ── helpers ─────────────────────────────────────────────────── */
@@ -29,8 +34,14 @@
 
   function byAbbr(a) {
     if (a === 'US') return USA;
-    for (var i = 0; i < S.length; i++) if (S[i].a === a) return S[i];
+    for (var i = 0; i < ROOMS.length; i++) if (ROOMS[i].a === a) return ROOMS[i];
     return S[34];
+  }
+  /* A room's name as people should read it: countries wear their flag. */
+  function roomName(r) { return (r && r.f ? r.f + ' ' : '') + (r ? r.n : ''); }
+  /* Every room code, All USA included — what the pulses watch. */
+  function allAbbrs() {
+    return ROOMS.map(function (x) { return x.a; }).concat(['US']);
   }
   function colorFor(name) { return COLORS[String(name).length % COLORS.length]; }
 
@@ -171,8 +182,7 @@
     }
     if (stopPulseVoice) stopPulseVoice();
     if (stopPulsePeople) stopPulsePeople();
-    var abs = S.map(function (x) { return x.a; }).concat(['US'])
-      .filter(function (ab) { return ab !== room.a; });
+    var abs = allAbbrs().filter(function (ab) { return ab !== room.a; });
     stopPulseVoice = db.peekVoiceMany(abs, function (ab, mics) {
       var had = !!hotVoice[ab];
       hotVoice[ab] = mics;
@@ -180,8 +190,7 @@
     });
     /* People are watched in every room — the one you're standing in too,
        so its dot goes green when somebody else is in there with you. */
-    var absAll = S.map(function (x) { return x.a; }).concat(['US']);
-    stopPulsePeople = db.peekPeopleMany(absAll, me.id, function (ab, n) {
+    stopPulsePeople = db.peekPeopleMany(allAbbrs(), me.id, function (ab, n) {
       var had = !!hotPeople[ab];
       hotPeople[ab] = n;
       if (had !== (n > 0)) drawRail();
@@ -272,13 +281,28 @@
   }
   $('pbarX').onclick = function () { $('pbar').hidden = true; db.setPref('hidePreviewBar', true); };
 
+  /* Both places a person picks where they belong: the 51 states first,
+     then a small "Other countries" group under them. */
+  function fillRoomPicker(box) {
+    S.forEach(function (s) {
+      var o = document.createElement('option');
+      o.value = s.a; o.textContent = s.n;
+      box.appendChild(o);
+    });
+    if (!C.length) return;
+    var g = document.createElement('optgroup');
+    g.label = 'Other countries';
+    C.forEach(function (c) {
+      var o = document.createElement('option');
+      o.value = c.a; o.textContent = roomName(c);
+      g.appendChild(o);
+    });
+    box.appendChild(g);
+  }
+
   /* ── join ────────────────────────────────────────────────────── */
   var sel = $('stt');
-  S.forEach(function (s) {
-    var o = document.createElement('option');
-    o.value = s.a; o.textContent = s.n;
-    sel.appendChild(o);
-  });
+  fillRoomPicker(sel);
 
   var swatches = [].slice.call(document.querySelectorAll('#pick .pk'));
   var chosenColor = COLORS[0], uploaded = null;
@@ -422,8 +446,8 @@
     $('profileBox').hidden = false;
     var mail = db.email && db.email();
     $('whoLead').textContent = mail
-      ? 'Signed in as ' + mail + '. This is what your state room sees.'
-      : 'This is what your state room sees.';
+      ? 'Signed in as ' + mail + '. This is what your room sees.'
+      : 'This is what your room sees.';
     cityHint(); paintSwatches();
     show('vJoin');
     $('nm').focus();
@@ -574,17 +598,26 @@
       b.onclick = function () { openRoom(target); };
       return b;
     }
+    function group(text) {
+      var l = document.createElement('div'); l.className = 'rl'; l.textContent = text;
+      rail.appendChild(l);
+    }
     rail.appendChild(railItem('🇺🇸 All USA', 'US', USA));
-    var l = document.createElement('div'); l.className = 'rl'; l.textContent = 'All states';
-    rail.appendChild(l);
+    group('All states');
     S.forEach(function (s) { rail.appendChild(railItem(s.n, s.a, s)); });
+    if (C.length) {
+      group('Other countries');
+      C.forEach(function (c) { rail.appendChild(railItem(roomName(c), c.a, c)); });
+    }
   }
 
 
   function setTitle() {
     var online = members.filter(function (p) { return p.online; }).length || (me ? 1 : 0);
     $('tNm').textContent = room.n;
-    $('tAb').textContent = room.a;
+    /* A country shows its flag where a state shows its code — nobody
+       should ever have to decode "CN" as Canada. */
+    $('tAb').textContent = room.f || room.a;
     if (room.a === 'US') {
       $('tCt').textContent = 'the whole community · ' + online + ' here now';
       return;
@@ -613,7 +646,8 @@
 
     if (me) {
       $('mAdmin').hidden = !me.host;
-      $('rsStateTxt').textContent = byAbbr(me.state).n;
+      var home = byAbbr(me.state);
+      $('rsStateTxt').textContent = home.sw || home.n;
       $('rsState').setAttribute('aria-selected', String(s.a !== 'US'));
       $('rsUsa').setAttribute('aria-selected', String(s.a === 'US'));
     }
@@ -1139,7 +1173,7 @@
     });
   }
 
-  var picking = false, chosenRooms = {}, lastCount = S.length;
+  var picking = false, chosenRooms = {}, lastCount = ROOMS.length;
   radio($('expiry'));
   radio($('aud'), function (o) {
     picking = o.dataset.all === '0';
@@ -1147,11 +1181,11 @@
     tally();
   });
 
-  S.forEach(function (s) {
+  ROOMS.forEach(function (s) {
     var c = document.createElement('button');
     c.type = 'button'; c.className = 'chip';
     c.setAttribute('aria-pressed', 'false');
-    c.textContent = s.a; c.title = s.n;
+    c.textContent = s.f || s.a; c.title = s.n;
     c.onclick = function () {
       var on = c.getAttribute('aria-pressed') === 'true';
       c.setAttribute('aria-pressed', String(!on));
@@ -1162,11 +1196,13 @@
   });
 
   function tally() {
-    var rooms = picking ? Object.keys(chosenRooms).length : S.length;
+    var rooms = picking ? Object.keys(chosenRooms).length : ROOMS.length;
     lastCount = rooms;
     var n = $('postN');
     if (n) n.textContent = rooms;
-    $('reachN').textContent = rooms ? (rooms === S.length ? 'Everyone' : rooms + ' of 51') : '—';
+    $('reachN').textContent = rooms
+      ? (rooms === ROOMS.length ? 'Everyone' : rooms + ' of ' + ROOMS.length)
+      : '—';
     $('postBtn').disabled = rooms === 0;
   }
 
@@ -1272,11 +1308,7 @@
 
   /* ── settings ────────────────────────────────────────────────── */
   var sSel = $('sStt');
-  S.forEach(function (s) {
-    var o = document.createElement('option');
-    o.value = s.a; o.textContent = s.n;
-    sSel.appendChild(o);
-  });
+  fillRoomPicker(sSel);
 
   var sSwatches = [].slice.call(document.querySelectorAll('#sPick .pk'));
   var sColor = null, sPhoto = null, sNameFree = true, sNameTimer = null;
@@ -1644,7 +1676,7 @@
   function gatheringRoom(g) {
     if (!g.rooms || !g.rooms.length || g.rooms.indexOf('US') > -1) return 'US';
     var target = g.rooms[0];
-    if (me && !me.host && target !== me.state) return 'US';   // members can't enter other states
+    if (me && !me.host && target !== me.state) return 'US';   // members only have their own room
     return target;
   }
 
@@ -2116,7 +2148,7 @@
     sessionStorage.removeItem('stateRooms.voice');
   } catch (e) {}
   if (!wantVoice && !framed && /[?&#]code=/.test(ARRIVED)) wantVoice = stashedVoice || null;
-  if (wantVoice && wantVoice !== 'US' && !window.STATES.some(function (x) { return x.a === wantVoice; })) wantVoice = null;
+  if (wantVoice && wantVoice !== 'US' && !ROOMS.some(function (x) { return x.a === wantVoice; })) wantVoice = null;
 
   /* Opened from the community to sign in: remember the secret and clean the
      address bar so the Google round trip sees the plain app URL. */
