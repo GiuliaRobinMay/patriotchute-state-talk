@@ -115,9 +115,9 @@ addEventListener('error', function (e) {
           </div>
         </div>
 
-        <div class="vtabs" role="tablist" aria-label="Chat or Live Room">
+        <div class="vtabs" role="tablist" aria-label="Chat or Talk Time">
           <button type="button" id="tabChat" role="tab" aria-selected="true" title="The written conversation in this room">💬 Chat<span class="pbadge" id="chatN" hidden></span></button>
-          <button type="button" id="tabTalk" role="tab" aria-selected="false" title="The voice room — listen in, or take the mic and speak">🎙 Live Room<span class="livedot" id="talkLive" hidden></span></button>
+          <button type="button" id="tabTalk" role="tab" aria-selected="false" title="Talk Time — listen in, or take the mic and speak">🎙 Talk Time<span class="livedot" id="talkLive" hidden></span></button>
         </div>
 
         <button class="livebanner" type="button" id="liveBanner" hidden title="Somebody is talking in All USA right now — tap to listen"></button>
@@ -136,14 +136,14 @@ addEventListener('error', function (e) {
           <span class="vlab"><i></i> On the mic</span>
           <div class="mics" id="mics"></div>
           <span class="vnames" id="vNames">Nobody yet — be the first</span>
-          <button class="jn" type="button" id="micBtn" title="Open the Live Room">🎙 Join the mic</button>
+          <button class="jn" type="button" id="micBtn" title="Open Talk Time">🎙 Join the mic</button>
           <button class="jn out" type="button" id="muteBtn" hidden title="Silence your microphone — you still hear everyone">🔇 Mute</button>
         </div>
 
         <div class="talk" id="vTalk" hidden>
           <div class="talkhelp" id="talkHelp" hidden>
             <div class="hh">
-              <b>How the Live Room works</b>
+              <b>How Talk Time works</b>
               <button type="button" class="cl" id="helpX" title="Hide this — you can bring it back any time">Got it ✓</button>
             </div>
             <ul>
@@ -155,7 +155,7 @@ addEventListener('error', function (e) {
               <li><b>Say something without interrupting</b> — the emojis fly up from your circle for everyone to see.</li>
             </ul>
           </div>
-          <button type="button" class="helpopen" id="helpOpen" hidden>ⓘ How the Live Room works</button>
+          <button type="button" class="helpopen" id="helpOpen" hidden>ⓘ How Talk Time works</button>
           <div class="ttopic" id="talkTopic" hidden></div>
           <div class="topicrow" id="topicRow" hidden>
             <input id="topicIn" type="text" maxlength="80" title="Name this talk, so people know what they are joining" placeholder="What's this talk about? (optional)">

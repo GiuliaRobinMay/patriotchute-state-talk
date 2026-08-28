@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 63';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 64';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   /* The countries sit under the states everywhere the states are listed.
@@ -137,7 +137,7 @@
   var stopPeek = function () {};
   var unread = {};              // room -> messages since you last had it open
   var otherMics = 0;            // people on the mic in the room you are not in
-  var unreadTab = 0;            // chat messages while the Live Room tab is open
+  var unreadTab = 0;            // chat messages while Talk Time is open
 
   function otherAb() { return me ? (room.a === 'US' ? me.state : 'US') : null; }
 
@@ -197,7 +197,7 @@
     });
   }
 
-  /* The banner that says something is happening in All USA right now —
+  /* The banner that says Talk Time is happening in All USA right now —
      shown in every room except All USA itself. */
   var stopUsWatch = null, usLive = 0, usInfo = null;
   function drawLiveBanner() {
@@ -206,12 +206,12 @@
     b.hidden = !show;
     if (!show) return;
     b.textContent = '';
-    var mic = document.createElement('b'); mic.textContent = '🎙 LIVE in All USA';
+    var mic = document.createElement('b'); mic.textContent = '🎙 TALK TIME in All USA';
     b.appendChild(mic);
     var rest = ' — ';
     if (usInfo && usInfo.topic) rest += '“' + usInfo.topic + '”';
     if (usInfo && usInfo.name) rest += (usInfo.topic ? ' with ' : '') + usInfo.name;
-    if (rest === ' — ') rest = ' — a State Talk is on';
+    if (rest === ' — ') rest = ' — Talk Time is on';
     var sp = document.createElement('span'); sp.textContent = rest + ' · tap to listen';
     b.appendChild(sp);
   }
@@ -1687,7 +1687,7 @@
     return null;
   }
 
-  /* When set, the Live Room's big button says this instead of its usual
+  /* When set, Talk Time's big button says this instead of its usual
      label — the strip's button is hidden in that view, so the pop-out's
      outcome must be told where the finger actually is. */
   var popNote = '';
@@ -1744,7 +1744,7 @@
   }
 
   /* One renderer feeding both places the call appears: the thin strip on
-     the chat view, and the Live Room stage. */
+     the chat view, and the Talk Time stage. */
   function renderVoice(list) {
     lastVoiceList = list || [];
     fillPhotosFor(lastVoiceList.map(function (p) { return p.uid; }),
@@ -1770,7 +1770,7 @@
     var v = $('vNames');
     var stripTopic = '';
     speakers.forEach(function (p) { if (p.claim && p.topic && !stripTopic) stripTopic = p.topic; });
-    if (!speakers.length) v.textContent = 'The Live Room is quiet — be the first on the mic';
+    if (!speakers.length) v.textContent = 'Talk Time is quiet — be the first on the mic';
     else if (speakers.length === 1) {
       v.textContent = speakers[0].you
         ? 'Your mic is live — talk while others join'
@@ -1781,7 +1781,7 @@
     if (stripTopic && speakers.length) v.textContent = '“' + stripTopic + '” · ' + v.textContent;
     $('muteBtn').hidden = !inCall;
 
-    /* the stage (Live Room view) */
+    /* the stage (Talk Time view) */
     var stage = $('stageMics');
     stage.textContent = '';
     $('stageN').textContent = speakers.length;
@@ -1793,7 +1793,7 @@
     }
     speakers.forEach(function (p) {
       var d = document.createElement('div');
-      /* 'onair', never 'talk': that word is the Live Room container's own
+      /* 'onair', never 'talk': that word is the Talk Time container's own
          class, and a state class sharing it inherits the container's
          flex/padding rules — the circle balloons to the middle of the
          stage the moment its person speaks. The halo must be the ONLY
@@ -1962,7 +1962,7 @@
     }).catch(function () { $('upWrap').hidden = true; });
   }
 
-  /* Chat ↔ Live Room. Entering the room seats you as a listener, so the
+  /* Chat ↔ Talk Time. Entering the room seats you as a listener, so the
      speakers know they have an audience; leaving stands you back up. */
   /* The explainer greets people until they say they have it, and then
      waits behind one line in case they want it again. The line about a
@@ -2069,7 +2069,7 @@
   });
 
   micBtn.onclick = function () { showTalk(true); };
-  micBtn.textContent = '🎙 Open the Live Room';
+  micBtn.textContent = '🎙 Open Talk Time';
 
   $('topicSet').onclick = function () {
     if (window.Voice && window.Voice.setTopic) window.Voice.setTopic($('topicIn').value.trim());
@@ -2679,7 +2679,7 @@
            opens on one big question, and the tap that answers it is the
            tap that joins. 'Cancel' still seats them as a listener, and
            that same tap is what unlocks their speaker. */
-        ask('You’re in the ' + byAbbr(wantVoice).n + ' Live Room. Take the mic now? ' +
+        ask('You’re in ' + byAbbr(wantVoice).n + ' Talk Time. Take the mic now? ' +
             '(Cancel just listens.)').then(function (ok) {
           if (ok) $('talkJoin').onclick.call($('talkJoin'));
         });
