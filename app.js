@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 60';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 61';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   /* The countries sit under the states everywhere the states are listed.
@@ -736,6 +736,19 @@
   };
 
   /* ── the room ────────────────────────────────────────────────── */
+  /* How many members belong to each room. Slow-moving, so it is fetched
+     once and then only now and then — the rail redraws constantly. */
+  var railCounts = {}, countsAt = 0;
+  function loadRailCounts() {
+    if (!me || !me.host || !db.shared || !db.memberCounts) return;
+    if (Date.now() - countsAt < 300000) return;          // five minutes is fresh enough
+    countsAt = Date.now();
+    db.memberCounts().then(function (map) {
+      railCounts = map || {};
+      drawRail();
+    }).catch(function () { countsAt = 0; });
+  }
+
   function drawRail() {
     var rail = $('rail');
     rail.textContent = '';
@@ -747,10 +760,20 @@
         ? lastVoiceList.filter(function (p) { return p.role !== 'listen'; }).length
         : (hotVoice[ab] || 0);
       b.className = 'ri' + (cur ? ' cur' : '') + (!cur && unseenChat[ab] ? ' unseen' : '');
+      /* The dot answers one question at a glance:
+         grey  — nobody has signed up from there yet
+         amber — people live there, none of them is here right now
+         green — somebody is in the room this minute
+         and it turns teal, pulsing, when a mic is open. */
       var ppl = hotPeople[ab] || 0;
+      if (cur) ppl = Math.max(ppl, 1);            // you are in this one
+      var lives = railCounts[ab] || 0;
       var d = document.createElement('span');
-      d.className = 'd' + (mics ? ' hot' : ppl ? ' ppl' : '');
-      if (ppl) d.title = ppl === 1 ? '1 person in there now' : ppl + ' people in there now';
+      d.className = 'd' + (mics ? ' hot' : ppl ? ' ppl' : lives ? ' some' : '');
+      d.title = (ppl ? (ppl === 1 ? '1 person in there now' : ppl + ' people in there now')
+                     : lives ? 'nobody there right now'
+                     : 'no members here yet') +
+        (lives ? ' · ' + lives + (lives === 1 ? ' member' : ' members') : '');
       var n = document.createElement('span'); n.className = 'n'; n.textContent = label;
       b.appendChild(d); b.appendChild(n);
       if (mics) {
@@ -817,7 +840,7 @@
     db.setPref('lastRoom', s.a);
 
     document.querySelector('.room').classList.toggle('solo', !(me && me.host));
-    if (me && me.host) drawRail();
+    if (me && me.host) { drawRail(); loadRailCounts(); }
 
     $('ci').placeholder = 'Message ' + s.n + '…';
     setTitle();
@@ -1251,12 +1274,14 @@
     n.textContent = p.name + (p.you ? ' (you)' : '');
     if (p.admin) n.appendChild(adminStar());
     t.appendChild(n);
-    /* In All USA everyone is from somewhere else, so say where; inside a
-       room they are all from there and the town alone is the useful part. */
+    /* In All USA everyone is from somewhere else, so name the place in
+       full — town and state both; inside a room they are all from there
+       and the town alone is the useful part. */
     var from = p.city || '';
     if (room.a === 'US' && p.state) {
       var h = byAbbr(p.state);
-      from = from ? from + ' · ' + (h.f || p.state) : (h.f ? h.f + ' ' + h.n : h.n);
+      var place = (h.f ? h.f + ' ' : '') + h.n;
+      from = from ? from + ' · ' + place : place;
     }
     if (from) { var c = document.createElement('span'); c.className = 'c'; c.textContent = from; t.appendChild(c); }
     row.appendChild(av); row.appendChild(t);

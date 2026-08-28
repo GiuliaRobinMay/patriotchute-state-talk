@@ -333,7 +333,8 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
 .wp{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:5px}
 .wp .t{min-width:0}
 .wp .t .n{font-size:12px;color:var(--dim);line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
-.wp .t .c{font-family:var(--mono);font-size:9.5px;color:var(--faint2);display:block}
+.wp .t .c{font-family:var(--mono);font-size:9.5px;color:var(--faint2);display:block;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wp.off .av{opacity:.42}
 .wp.off .t .n{color:var(--faint)}
 
@@ -560,6 +561,8 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
 .ri .d.hot{background:var(--teal2);box-shadow:0 0 0 3px rgba(63,160,143,.18)}
 /* people are in there right now — chatting, not talking */
 .ri .d.ppl{background:var(--green);box-shadow:0 0 0 3px var(--green-glow)}
+/* members live there, but none of them is here at the moment */
+.ri .d.some{background:#C98A2E;box-shadow:0 0 0 3px rgba(201,138,46,.16)}
 .ri .rmic{margin-left:4px;font-size:10px;animation:p 1.7s infinite}
 .ri.unseen .n{font-weight:800;color:var(--paper)}
 

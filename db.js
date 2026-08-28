@@ -116,6 +116,7 @@
     membersAll: function () { return Promise.resolve([]); },
     setBanned: function () { return Promise.resolve(); },
     setAdmin: function () { return Promise.resolve(); },
+    memberCounts: function () { return Promise.resolve({}); },
     sendProblem: function () { return Promise.resolve(); },
     problems: function () { return Promise.resolve([]); },
     setProblemDone: function () { return Promise.resolve(); },
@@ -976,6 +977,23 @@
             return r;
           })
           .then(function (r) { if (r.error) throw r.error; return r.data || []; });
+      },
+
+      /* How many members belong to each room — the rail's "somebody lives
+         here at all", as opposed to "somebody is here right now". One
+         small read of a single column, asked for once in a while. */
+      memberCounts: function () {
+        return client.from('profiles')
+          .select('state')
+          .limit(5000)
+          .then(function (r) {
+            if (r.error) throw r.error;
+            var out = {};
+            (r.data || []).forEach(function (p) {
+              if (p.state) out[p.state] = (out[p.state] || 0) + 1;
+            });
+            return out;
+          });
       },
 
       /* ── the problem book ─────────────────────────────────────────
