@@ -1,31 +1,20 @@
--- ── Talk Time 2.0: a clean start, and a welcome in every room ─────
+-- ── Talk Time 2.0: a clean start, and a welcome from Chas ─────────
 --
--- Run this once, in Supabase → SQL Editor → New query → paste → Run.
+-- Paste the whole of this into Supabase → SQL Editor → New query → Run.
+-- Nothing in here needs changing first.
 --
--- It does two things:
---   1. empties the Alabama and All USA rooms of everything said so far
---   2. posts one welcome, written as you, at the top of all 54 rooms
---
--- The welcome is posted by whoever the name below belongs to. Check it
--- matches your profile name exactly — if it finds nobody, the whole thing
--- stops and changes nothing. To welcome people as Chas instead, put his
--- profile name here.
+-- It empties the Alabama and All USA rooms, then posts one welcome from
+-- Chas at the top of all 54 rooms. If it cannot find Chas, it stops and
+-- changes nothing at all.
 
 begin;
 
--- 1. the clean start: Alabama and All USA, where the testing happened
 delete from messages where room in ('AL', 'US');
 
--- If other rooms picked up test chatter too and you want the whole board
--- swept before opening the doors, delete the line above and use this one
--- instead (remove the two dashes):
--- delete from messages;
-
--- 2. the welcome
 insert into messages (room, author, body)
 select
   r.code,
-  (select id from profiles where name = 'Giulia May' limit 1),
+  (select id from profiles where name ilike 'chas%' order by created_at limit 1),
   '🇺🇸  Welcome to Talk Time 2.0 — ' || r.name || E'\n\n' ||
   case r.kind
     when 'usa' then
