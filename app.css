@@ -444,6 +444,21 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
 .talkctl .btn{align-self:auto}
 .stage .none,.earGrid .none{font-size:13px;color:var(--faint);align-self:center}
 
+/* what the Live Room is, in plain words, the first time you walk in */
+.talkhelp{background:var(--panel);border:1px solid var(--edge);border-left:3px solid var(--red);
+  border-radius:9px;padding:13px 15px}
+.talkhelp .hh{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.talkhelp .hh b{flex:1;font-size:13.5px;color:var(--paper);font-weight:700}
+.talkhelp .cl{background:none;border:1px solid var(--line2);border-radius:6px;color:var(--dim);
+  font-size:11.5px;padding:5px 10px;cursor:pointer;white-space:nowrap}
+.talkhelp .cl:hover{color:var(--text);background:var(--panel2)}
+.talkhelp ul{margin:0;padding-left:17px;display:flex;flex-direction:column;gap:6px}
+.talkhelp li{font-size:12.5px;line-height:1.55;color:var(--dim)}
+.talkhelp li b{color:var(--text);font-weight:600}
+.helpopen{align-self:flex-start;background:none;border:0;color:var(--faint);font-size:11.5px;
+  cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:2px}
+.helpopen:hover{color:var(--teal2)}
+
 
 /* ── report a message ────────────────────────────────────────────── */
 /* Always faintly visible — a button nobody can see is a button nobody

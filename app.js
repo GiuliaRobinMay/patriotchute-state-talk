@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 62';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 63';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   /* The countries sit under the states everywhere the states are listed.
@@ -781,6 +781,7 @@
         b.appendChild(mi);
       }
       b.onclick = function () { openRoom(target); };
+      b.setAttribute('aria-label', label);
       return b;
     }
     /* A heading that folds its rooms away. Fifty-one states is a lot to
@@ -1838,6 +1839,8 @@
     if (hb && window.Voice) {
       var up = window.Voice.handUp && window.Voice.handUp();
       hb.textContent = up ? '✋ Lower hand' : '✋ Raise hand';
+      hb.title = up ? 'Take your hand down again'
+        : 'Ask for a turn to speak — the moderator sees your hand';
       hb.classList.toggle('up', !!up);
     }
 
@@ -1890,6 +1893,11 @@
     $('talkJoin').textContent = inCall ? 'Leave the mic'
       : popNote || (framed && micPermitted() !== true ? '🎙 Open a tab to talk' : '🎙 Join the mic');
     $('talkJoin').className = inCall ? 'btn g' : 'btn';
+    $('talkJoin').title = inCall
+      ? 'Stop speaking — you stay in the room and keep hearing everyone'
+      : (framed && micPermitted() !== true
+        ? 'Speaking happens in its own tab for now — the chat stays here'
+        : 'Speak to the room');
     $('talkMute').hidden = !inCall;
     updateSignals();
   }
@@ -1956,8 +1964,21 @@
 
   /* Chat ↔ Live Room. Entering the room seats you as a listener, so the
      speakers know they have an audience; leaving stands you back up. */
+  /* The explainer greets people until they say they have it, and then
+     waits behind one line in case they want it again. The line about a
+     second tab only appears where that is actually true. */
+  function drawTalkHelp() {
+    var seen = db.pref('talkHelpSeen', false);
+    $('talkHelp').hidden = !!seen;
+    $('helpOpen').hidden = !seen;
+    $('helpTab').hidden = !(framed && micPermitted() !== true);
+  }
+  $('helpX').onclick = function () { db.setPref('talkHelpSeen', true); drawTalkHelp(); };
+  $('helpOpen').onclick = function () { db.setPref('talkHelpSeen', false); drawTalkHelp(); };
+
   function showTalk(open) {
     talkOpen = open;
+    if (open) drawTalkHelp();
     $('vTalk').hidden = !open;
     $('chat').hidden = open;
     $('cmp').hidden = open;
@@ -2026,7 +2047,10 @@
     var muted = !this.dataset.muted;
     this.dataset.muted = muted ? '1' : '';
     this.textContent = muted ? '🔊 Unmute' : '🔇 Mute';
+    this.title = muted ? 'Turn your microphone back on'
+      : 'Silence your microphone — you still hear everyone';
     $('talkMute').textContent = this.textContent;
+    $('talkMute').title = this.title;
     if (window.Voice) window.Voice.setMuted(muted);
     if (!db.shared && micStream) {
       micStream.getAudioTracks().forEach(function (t) { t.enabled = !muted; });
@@ -2063,6 +2087,7 @@
   /* One emoji per beat: enthusiasm, not spam. */
   var lastEmote = 0;
   [].slice.call(document.querySelectorAll('#reactRow [data-e]')).forEach(function (b) {
+    b.title = 'Send ' + b.dataset.e + ' — it flies up from your circle for everyone to see';
     b.onclick = function () {
       if (!window.Voice || !window.Voice.present()) return;
       var now = Date.now();

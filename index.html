@@ -96,8 +96,8 @@ addEventListener('error', function (e) {
             <span class="meta" id="tCt"></span>
           </div>
           <div class="rswitch" role="tablist" aria-label="Rooms">
-            <button type="button" id="rsState" role="tab" aria-selected="true"><span id="rsStateTxt">Your state</span><span class="pmic" id="rsStateMic" hidden>🎙</span><span class="pbadge" id="rsStateN" hidden></span></button>
-            <button type="button" id="rsUsa" role="tab" aria-selected="false"><span id="rsUsaTxt">🇺🇸 All USA</span><span class="pmic" id="rsUsaMic" hidden>🎙</span><span class="pbadge" id="rsUsaN" hidden></span></button>
+            <button type="button" id="rsState" role="tab" aria-selected="true" title="Your own room"><span id="rsStateTxt">Your state</span><span class="pmic" id="rsStateMic" hidden>🎙</span><span class="pbadge" id="rsStateN" hidden></span></button>
+            <button type="button" id="rsUsa" role="tab" aria-selected="false" title="The room the whole community shares"><span id="rsUsaTxt">🇺🇸 All USA</span><span class="pmic" id="rsUsaMic" hidden>🎙</span><span class="pbadge" id="rsUsaN" hidden></span></button>
           </div>
           <div class="menuwrap">
             <button class="mebtn" type="button" id="meBtn2" aria-expanded="false">
@@ -107,20 +107,20 @@ addEventListener('error', function (e) {
             </button>
             <div class="menu" id="meMenu" hidden>
               <div class="mhead" id="meMail"></div>
-              <button type="button" id="mAdmin" hidden>Admin zone</button>
-              <button type="button" id="mSettings">Settings</button>
-              <button type="button" id="mReport">⚠ Report a problem</button>
-              <button type="button" id="mOut">Sign out</button>
+              <button type="button" id="mAdmin" hidden title="Announcements, flagged messages, members and problem reports">Admin zone</button>
+              <button type="button" id="mSettings" title="Your name, picture, state and theme">Settings</button>
+              <button type="button" id="mReport" title="Tell the team something is broken">⚠ Report a problem</button>
+              <button type="button" id="mOut" title="Sign out of Patriot State Talks">Sign out</button>
             </div>
           </div>
         </div>
 
         <div class="vtabs" role="tablist" aria-label="Chat or Live Room">
-          <button type="button" id="tabChat" role="tab" aria-selected="true">💬 Chat<span class="pbadge" id="chatN" hidden></span></button>
-          <button type="button" id="tabTalk" role="tab" aria-selected="false">🎙 Live Room<span class="livedot" id="talkLive" hidden></span></button>
+          <button type="button" id="tabChat" role="tab" aria-selected="true" title="The written conversation in this room">💬 Chat<span class="pbadge" id="chatN" hidden></span></button>
+          <button type="button" id="tabTalk" role="tab" aria-selected="false" title="The voice room — listen in, or take the mic and speak">🎙 Live Room<span class="livedot" id="talkLive" hidden></span></button>
         </div>
 
-        <button class="livebanner" type="button" id="liveBanner" hidden></button>
+        <button class="livebanner" type="button" id="liveBanner" hidden title="Somebody is talking in All USA right now — tap to listen"></button>
 
         <div class="notice" id="notice" hidden>
           <div class="nb">
@@ -136,15 +136,30 @@ addEventListener('error', function (e) {
           <span class="vlab"><i></i> On the mic</span>
           <div class="mics" id="mics"></div>
           <span class="vnames" id="vNames">Nobody yet — be the first</span>
-          <button class="jn" type="button" id="micBtn">🎙 Join the mic</button>
-          <button class="jn out" type="button" id="muteBtn" hidden>🔇 Mute</button>
+          <button class="jn" type="button" id="micBtn" title="Open the Live Room">🎙 Join the mic</button>
+          <button class="jn out" type="button" id="muteBtn" hidden title="Silence your microphone — you still hear everyone">🔇 Mute</button>
         </div>
 
         <div class="talk" id="vTalk" hidden>
+          <div class="talkhelp" id="talkHelp" hidden>
+            <div class="hh">
+              <b>How the Live Room works</b>
+              <button type="button" class="cl" id="helpX" title="Hide this — you can bring it back any time">Got it ✓</button>
+            </div>
+            <ul>
+              <li><b>Everyone here can hear everything.</b> You do not need a microphone to listen — just being in this room is enough.</li>
+              <li><b>Nobody hears you until you take the mic.</b> Press <b>🎙 Join the mic</b> when you want to speak, and <b>Leave the mic</b> when you are done.</li>
+              <li id="helpTab" hidden><b>Taking the mic opens a second tab.</b> The community page will not hand us a microphone yet, so the talking happens in its own window — the chat carries on here. Come back to this tab whenever you like.</li>
+              <li><b>Want a turn?</b> Press <b>✋ Raise hand</b>. The moderator sees it and can invite you to speak.</li>
+              <li><b>The moderator</b> is whoever opened the room, unless an admin or Chas is on the mic. Their circle wears the gold badge.</li>
+              <li><b>Say something without interrupting</b> — the emojis fly up from your circle for everyone to see.</li>
+            </ul>
+          </div>
+          <button type="button" class="helpopen" id="helpOpen" hidden>ⓘ How the Live Room works</button>
           <div class="ttopic" id="talkTopic" hidden></div>
           <div class="topicrow" id="topicRow" hidden>
-            <input id="topicIn" type="text" maxlength="80" placeholder="What's this talk about? (optional)">
-            <button class="btn g" type="button" id="topicSet">Set topic</button>
+            <input id="topicIn" type="text" maxlength="80" title="Name this talk, so people know what they are joining" placeholder="What's this talk about? (optional)">
+            <button class="btn g" type="button" id="topicSet" title="Show this name on the room and on the live banner">Set topic</button>
           </div>
           <div>
             <div class="tlab">On the mic · <span id="stageN">0</span></div>
@@ -159,7 +174,7 @@ addEventListener('error', function (e) {
             <div class="ups" id="upList"></div>
           </div>
           <div class="reactrow" id="reactRow" aria-label="React">
-            <button type="button" class="hand" id="handBtn">✋ Raise hand</button>
+            <button type="button" class="hand" id="handBtn" title="Ask for a turn to speak — the moderator sees your hand">✋ Raise hand</button>
             <span class="rsep" aria-hidden="true"></span>
             <button type="button" data-e="💯">💯</button>
             <button type="button" data-e="🤣">🤣</button>
@@ -171,8 +186,8 @@ addEventListener('error', function (e) {
             <button type="button" data-e="😮">😮</button>
           </div>
           <div class="talkctl">
-            <button class="btn" id="talkJoin">🎙 Join the mic</button>
-            <button class="btn g" type="button" id="talkMute" hidden>🔇 Mute</button>
+            <button class="btn" id="talkJoin" title="Speak to the room">🎙 Join the mic</button>
+            <button class="btn g" type="button" id="talkMute" hidden title="Silence your microphone — you still hear everyone">🔇 Mute</button>
           </div>
         </div>
 
@@ -193,7 +208,7 @@ addEventListener('error', function (e) {
 
       <aside class="who">
         <div class="wholist" id="whoList"></div>
-        <button class="reportbtn" type="button" id="repBtn">⚠ Report a problem</button>
+        <button class="reportbtn" type="button" id="repBtn" title="Something not working? Tell the team — your device details come along automatically">⚠ Report a problem</button>
       </aside>
     </div>
   </section>
@@ -256,10 +271,10 @@ addEventListener('error', function (e) {
   <!-- ── ANNOUNCEMENTS (admin) ── -->
   <section class="view" id="vAnn" aria-label="Admin zone">
     <div class="atabs" role="tablist" aria-label="Admin zone">
-      <button type="button" id="atAnn" role="tab" aria-selected="true">📣 Announce</button>
-      <button type="button" id="atRep" role="tab" aria-selected="false">⚑ Reports</button>
-      <button type="button" id="atMem" role="tab" aria-selected="false">👥 Members</button>
-      <button type="button" id="atPrb" role="tab" aria-selected="false">🛠 Problems<span class="pbadge" id="prbN" hidden></span></button>
+      <button type="button" id="atAnn" role="tab" aria-selected="true" title="Pin a notice to the top of any room">📣 Announce</button>
+      <button type="button" id="atRep" role="tab" aria-selected="false" title="Messages members have flagged">⚑ Reports</button>
+      <button type="button" id="atMem" role="tab" aria-selected="false" title="Everyone who has joined — make admins, remove access">👥 Members</button>
+      <button type="button" id="atPrb" role="tab" aria-selected="false" title="What members reported broken, and what the app caught itself">🛠 Problems<span class="pbadge" id="prbN" hidden></span></button>
     </div>
     <div class="adminpad" id="padRep" hidden></div>
     <div class="adminpad" id="padPrb" hidden></div>
