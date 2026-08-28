@@ -322,7 +322,13 @@ button,input,select,textarea{font-family:inherit}
 .snd{background:var(--red);color:#FDF9F5;border:0;width:35px;height:35px;border-radius:50%;cursor:pointer;
   font-size:15px;flex:0 0 auto;display:flex;align-items:center;justify-content:center}
 
-aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 10px;overflow-y:auto;min-height:0}
+aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 10px;min-height:0;
+  display:flex;flex-direction:column;gap:10px}
+.wholist{flex:1;overflow-y:auto;min-height:0}
+/* Under the people, where anyone can find it without opening a menu. */
+.reportbtn{flex:0 0 auto;background:none;border:1px solid var(--edge);border-radius:7px;
+  color:var(--faint);font-size:11.5px;padding:8px 10px;cursor:pointer;text-align:center;width:100%}
+.reportbtn:hover{color:var(--red2);border-color:var(--mine-line);background:var(--panel)}
 .wl{font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint2);padding:0 6px 9px}
 .wp{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:5px}
 .wp .t{min-width:0}

@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 59';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 60';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   /* The countries sit under the states everywhere the states are listed.
@@ -1459,7 +1459,11 @@
   document.addEventListener('click', function () { toggleMenu(false); });
   meMenu.onclick = function (e) { e.stopPropagation(); };
   $('mSettings').onclick = function () { toggleMenu(false); openSettings(); };
+  /* The way to tell us lives under the people on the right, in plain
+     sight. It stays in the menu too, because that whole column is hidden
+     on a phone — and a phone is where trouble usually happens. */
   $('mReport').onclick = function () { toggleMenu(false); reportSheet(); };
+  $('repBtn').onclick = function () { reportSheet(); };
   $('mAdmin').onclick = function () {
     toggleMenu(false);
     if (location.hash === '#admin') checkHash();
