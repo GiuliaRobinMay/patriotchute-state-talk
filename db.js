@@ -116,6 +116,10 @@
     membersAll: function () { return Promise.resolve([]); },
     setBanned: function () { return Promise.resolve(); },
     setAdmin: function () { return Promise.resolve(); },
+    sendProblem: function () { return Promise.resolve(); },
+    problems: function () { return Promise.resolve([]); },
+    setProblemDone: function () { return Promise.resolve(); },
+    deleteProblem: function () { return Promise.resolve(); },
 
     dismissed: function (id) { return get('dismissed.' + id, false); },
     dismiss: function (id) { put('dismissed.' + id, true); },
@@ -972,6 +976,56 @@
             return r;
           })
           .then(function (r) { if (r.error) throw r.error; return r.data || []; });
+      },
+
+      /* ── the problem book ─────────────────────────────────────────
+         A report may arrive from someone who is not signed in — a broken
+         sign-in is exactly the kind of trouble worth hearing about — so
+         `member` is only set when there is genuinely an account behind it. */
+      sendProblem: function (p) {
+        var row = {
+          member: uid || null,
+          name: p.name || null,
+          kind: p.kind === 'auto' ? 'auto' : 'report',
+          note: (p.note || '').slice(0, 1200),
+          build: p.build || null,
+          room: p.room || null,
+          page: (p.page || '').slice(0, 300) || null,
+          device: p.device || null,
+          agent: (p.agent || '').slice(0, 400) || null,
+          screen: p.screen || null,
+          errors: (p.errors || '').slice(0, 2000) || null
+        };
+        return client.from('problems').insert(row)
+          .then(function (r) { if (r.error) throw r.error; });
+      },
+
+      problems: function () {
+        return client.from('problems')
+          .select('id, name, kind, note, build, room, page, device, agent, screen, errors, done, created_at')
+          .order('created_at', { ascending: false })
+          .limit(200)
+          .then(function (r) {
+            if (r.error) throw r.error;
+            return (r.data || []).map(function (x) {
+              return {
+                id: x.id, name: x.name, kind: x.kind, note: x.note,
+                build: x.build, room: x.room, page: x.page, device: x.device,
+                agent: x.agent, screen: x.screen, errors: x.errors,
+                done: !!x.done, when: new Date(x.created_at).getTime()
+              };
+            });
+          });
+      },
+
+      setProblemDone: function (id, v) {
+        return client.from('problems').update({ done: !!v }).eq('id', id)
+          .then(function (r) { if (r.error) throw r.error; });
+      },
+
+      deleteProblem: function (id) {
+        return client.from('problems').delete().eq('id', id)
+          .then(function (r) { if (r.error) throw r.error; });
       },
 
       setBanned: function (id, b) {

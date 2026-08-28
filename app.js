@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 58';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 59';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   /* The countries sit under the states everywhere the states are listed.
@@ -409,6 +409,87 @@
   function saySigningIn(msg, kind) {
     authchk.className = 'chk ' + (kind || 'wait');
     authchk.textContent = msg;
+    /* Sign-in is where trouble hurts most and where a member has no menu
+       to reach for — so the way to tell us sits right under the error. */
+    if (kind === 'no' && !$('signinBox').querySelector('.reportlink')) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'reportlink';
+      b.textContent = '⚠ Tell the team what happened';
+      b.onclick = function () { reportSheet(); };
+      $('signinBox').appendChild(b);
+    }
+  }
+
+  /* ── the problem book ────────────────────────────────────────────
+     A bug report is only useful with the room around it: which phone,
+     which browser, inside the community or in its own tab, which build,
+     and whatever the app itself caught going wrong. All of that is
+     gathered here so nobody has to be asked for it afterwards. */
+  function deviceLine() {
+    var ua = navigator.userAgent || '';
+    var os = /iPad/.test(ua) ? 'iPad'
+      : /iPhone|iPod/.test(ua) ? 'iPhone'
+      : /Android/.test(ua) ? 'Android phone'
+      : /Macintosh|Mac OS X/.test(ua) ? 'Mac'
+      : /Windows/.test(ua) ? 'Windows PC'
+      : /Linux/.test(ua) ? 'Linux' : 'unknown device';
+    var br = /FBAN|FBAV|FB_IAB/.test(ua) ? 'Facebook in-app browser'
+      : /Instagram/.test(ua) ? 'Instagram in-app browser'
+      : /Edg\//.test(ua) ? 'Edge'
+      : /OPR\/|Opera/.test(ua) ? 'Opera'
+      : /SamsungBrowser/.test(ua) ? 'Samsung Internet'
+      : /CriOS|Chrome\//.test(ua) ? 'Chrome'
+      : /FxiOS|Firefox\//.test(ua) ? 'Firefox'
+      : /Safari\//.test(ua) ? 'Safari' : 'unknown browser';
+    var bv = (ua.match(/(?:Edg|OPR|CriOS|FxiOS|Chrome|Firefox|Version)\/(\d+)/) || [])[1];
+    var ov = (ua.match(/(?:iPhone )?OS (\d+[._]\d+)/) || ua.match(/Android (\d+(?:\.\d+)?)/) || [])[1];
+    return os + ' · ' + br + (bv ? ' ' + bv : '') + (ov ? ' · OS ' + ov.replace(/_/g, '.') : '');
+  }
+
+  function screenLine() {
+    var mic = micPermitted();
+    return window.innerWidth + '×' + window.innerHeight +
+      ' (screen ' + screen.width + '×' + screen.height + ')' +
+      ' · ' + (framed ? 'inside the community' : 'its own tab') +
+      ' · ' + (db && db.pref ? db.pref('theme', 'dark') : 'dark') + ' theme' +
+      ' · mic allowed here: ' + (mic === true ? 'yes' : mic === false ? 'no' : 'unknown');
+  }
+
+  function caughtErrors() {
+    var list = (window.__errs || []).slice(-6);
+    return list.join('\n');
+  }
+
+  function problemFacts(note, kind) {
+    return {
+      kind: kind || 'report',
+      note: note || '',
+      name: (me && me.name) || (db && db.email && db.email()) || '',
+      build: BUILD,
+      room: room ? room.a : '',
+      page: location.href,
+      device: deviceLine(),
+      agent: navigator.userAgent || '',
+      screen: screenLine(),
+      errors: caughtErrors()
+    };
+  }
+
+  /* Trouble the app notices by itself, sent quietly: a handful per visit,
+     never the same one twice, and never a failure caused by the sending. */
+  var autoSent = {}, autoCount = 0, sending = false;
+  function reportAuto(msg) {
+    if (!db || !db.shared || !db.sendProblem || sending) return;
+    var key = String(msg).slice(0, 120);
+    if (autoSent[key] || autoCount >= 3) return;
+    autoSent[key] = true; autoCount++;
+    sending = true;
+    try {
+      db.sendProblem(problemFacts(key, 'auto'))
+        .catch(function () {})
+        .then(function () { sending = false; });
+    } catch (e) { sending = false; }
   }
 
   /* "Nothing happens" is the worst possible error message. Anything that
@@ -426,12 +507,93 @@
     } catch (x) {}
   }
   window.addEventListener('error', function (e) {
+    var msg = e.message || 'unknown';
+    if (e.filename) msg += ' (' + String(e.filename).split('/').pop() + ':' + (e.lineno || '?') + ')';
     surfaceError(e.message || 'unknown');
+    reportAuto(msg);
   });
   window.addEventListener('unhandledrejection', function (e) {
     var r = e.reason;
-    surfaceError((r && r.message) || String(r || 'unknown'));
+    var msg = (r && r.message) || String(r || 'unknown');
+    surfaceError(msg);
+    reportAuto('promise: ' + msg);
   });
+
+  /* The form itself. Deliberately one box and one button: the moment a
+     report asks for effort, people stop sending them and just leave. */
+  var repEl = null;
+  function reportSheet() {
+    if (!repEl) {
+      repEl = document.createElement('div');
+      repEl.className = 'sheet';
+      repEl.style.zIndex = '92';
+      var card = document.createElement('div'); card.className = 'card';
+      var head = document.createElement('div'); head.className = 'chead';
+      var h2 = document.createElement('h2'); h2.textContent = 'Report a problem';
+      var x = document.createElement('button'); x.type = 'button'; x.className = 'x'; x.textContent = '✕';
+      head.appendChild(h2); head.appendChild(x);
+
+      var body = document.createElement('div'); body.className = 'cbody';
+      var f = document.createElement('div'); f.className = 'f';
+      var lab = document.createElement('label'); lab.setAttribute('for', 'repNote');
+      lab.textContent = 'What went wrong?';
+      var ta = document.createElement('textarea');
+      ta.id = 'repNote'; ta.maxLength = 1200;
+      ta.placeholder = 'I pressed Join the mic and nothing happened…';
+      f.appendChild(lab); f.appendChild(ta);
+      var facts = document.createElement('div'); facts.className = 'facts';
+      body.appendChild(f); body.appendChild(facts);
+
+      var foot = document.createElement('div'); foot.className = 'cfoot';
+      var chk = document.createElement('span'); chk.className = 'chk'; chk.style.flex = '1';
+      var send = document.createElement('button'); send.type = 'button'; send.className = 'btn';
+      send.textContent = 'Send to the team';
+      foot.appendChild(chk); foot.appendChild(send);
+
+      card.appendChild(head); card.appendChild(body); card.appendChild(foot);
+      repEl.appendChild(card);
+      document.body.appendChild(repEl);
+
+      function close() { repEl.hidden = true; }
+      x.onclick = close;
+      repEl.onclick = function (e) { if (e.target === repEl) close(); };
+      send.onclick = function () {
+        var note = ta.value.trim();
+        if (!note) { ta.focus(); return; }
+        send.disabled = true;
+        chk.className = 'chk wait'; chk.textContent = 'sending…';
+        db.sendProblem(problemFacts(note, 'report')).then(function () {
+          send.disabled = false;
+          ta.value = '';
+          close();
+          toast('Thank you — the team can see exactly what your device did.');
+        }).catch(function (err) {
+          send.disabled = false;
+          chk.className = 'chk no';
+          chk.textContent = '✕ ' + ((err && err.message) || 'Could not send — try again');
+        });
+      };
+      repEl._fill = function () {
+        chk.className = 'chk'; chk.textContent = '';
+        facts.textContent = '';
+        var t = document.createElement('p'); t.className = 'hint';
+        t.textContent = 'Sent with your note, so nobody has to ask:';
+        facts.appendChild(t);
+        var ul = document.createElement('div'); ul.className = 'factlist';
+        [deviceLine(), screenLine(),
+         'room ' + (room ? room.a : '—') + ' · ' + BUILD,
+         caughtErrors() ? 'app errors: ' + caughtErrors().split('\n')[0] : 'no app errors so far'
+        ].forEach(function (line) {
+          var d = document.createElement('div'); d.textContent = line; ul.appendChild(d);
+        });
+        facts.appendChild(ul);
+        setTimeout(function () { try { ta.focus(); } catch (e) {} }, 30);
+      };
+    }
+    repEl.hidden = false;
+    repEl._fill();
+  }
+  window.__report = reportSheet;      // reachable from the sign-in screen too
 
   function afterSignIn() {
     return db.init().then(function (profile) {
@@ -1297,6 +1459,7 @@
   document.addEventListener('click', function () { toggleMenu(false); });
   meMenu.onclick = function (e) { e.stopPropagation(); };
   $('mSettings').onclick = function () { toggleMenu(false); openSettings(); };
+  $('mReport').onclick = function () { toggleMenu(false); reportSheet(); };
   $('mAdmin').onclick = function () {
     toggleMenu(false);
     if (location.hash === '#admin') checkHash();
@@ -1994,7 +2157,8 @@
   }
 
   function adminTab(which) {
-    var map = { ann: ['atAnn', 'padAnn'], rep: ['atRep', 'padRep'], mem: ['atMem', 'padMem'] };
+    var map = { ann: ['atAnn', 'padAnn'], rep: ['atRep', 'padRep'],
+                mem: ['atMem', 'padMem'], prb: ['atPrb', 'padPrb'] };
     Object.keys(map).forEach(function (k) {
       $(map[k][0]).setAttribute('aria-selected', String(k === which));
       $(map[k][1]).hidden = k !== which;
@@ -2002,10 +2166,152 @@
     if (which === 'ann') loadAnnList();
     if (which === 'rep') loadReports();
     if (which === 'mem') loadMembersAdmin('');
+    if (which === 'prb') loadProblems();
   }
   $('atAnn').onclick = function () { adminTab('ann'); };
   $('atRep').onclick = function () { adminTab('rep'); };
   $('atMem').onclick = function () { adminTab('mem'); };
+  $('atPrb').onclick = function () { adminTab('prb'); };
+
+  /* ── the problem book, as admins read it ─────────────────────────
+     Everything needed to fix something without a conversation: who, when,
+     which phone, which browser, embedded or not, which build, their own
+     words, and whatever the app caught. */
+  function problemText(p) {
+    return [
+      (p.kind === 'auto' ? '[caught by the app]' : '[reported by ' + (p.name || 'someone') + ']') +
+        ' ' + new Date(p.when).toLocaleString('en-US'),
+      p.note ? 'said: ' + p.note : '',
+      'device: ' + (p.device || 'unknown'),
+      'window: ' + (p.screen || 'unknown'),
+      'room: ' + (p.room || '—') + ' · ' + (p.build || 'build unknown'),
+      p.errors ? 'errors: ' + p.errors.replace(/\n/g, ' | ') : '',
+      p.page ? 'page: ' + p.page : '',
+      p.agent ? 'browser line: ' + p.agent : ''
+    ].filter(Boolean).join('\n');
+  }
+
+  function loadProblems() {
+    var pad = $('padPrb');
+    /* The rest of the admin zone must open even if the problem book does
+       not — an older app, or a database that has not been given the table
+       yet, is no reason to lose the announcements and the members. */
+    if (!db.problems) { pad.textContent = 'The problem book is not set up yet.'; return; }
+    pad.textContent = 'Loading…';
+    db.problems().then(function (list) {
+      pad.textContent = '';
+      var open = list.filter(function (p) { return !p.done; });
+      $('prbN').hidden = !open.length;
+      if (open.length) $('prbN').textContent = open.length > 9 ? '9+' : open.length;
+
+      var bar = document.createElement('div');
+      bar.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+      var lead = document.createElement('p'); lead.className = 'hint'; lead.style.flex = '1';
+      lead.textContent = list.length
+        ? open.length + ' open · ' + list.length + ' in total'
+        : 'Nothing reported yet, and nothing broke by itself.';
+      bar.appendChild(lead);
+      if (list.length) {
+        var cp = document.createElement('button');
+        cp.className = 'btn g'; cp.type = 'button'; cp.style.cssText = 'align-self:auto;padding:8px 13px;font-size:12.5px';
+        cp.textContent = '📋 Copy all for the developer';
+        cp.onclick = function () { copyOut(list.map(problemText).join('\n\n———\n\n')); };
+        bar.appendChild(cp);
+      }
+      pad.appendChild(bar);
+
+      list.forEach(function (p) {
+        var card = document.createElement('div');
+        card.className = 'repcard' + (p.done ? ' handled' : '');
+
+        var hd = document.createElement('div'); hd.className = 'rhd';
+        var chip = document.createElement('span');
+        chip.className = 'cnt' + (p.kind === 'auto' ? ' auto' : '');
+        chip.textContent = p.kind === 'auto' ? 'APP CAUGHT IT' : 'REPORTED';
+        hd.appendChild(chip);
+        var who = document.createElement('b'); who.textContent = p.name || 'someone not signed in';
+        hd.appendChild(who);
+        var when = document.createElement('span');
+        when.textContent = new Date(p.when).toLocaleString('en-US', {
+          month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+        });
+        hd.appendChild(when);
+        card.appendChild(hd);
+
+        if (p.note) {
+          var bd = document.createElement('div'); bd.className = 'bd'; bd.textContent = p.note;
+          card.appendChild(bd);
+        }
+
+        var facts = document.createElement('div'); facts.className = 'factlist';
+        [p.device, p.screen,
+         (p.room ? 'room ' + p.room : '') + (p.build ? ' · ' + p.build : ''),
+         p.errors ? 'errors: ' + p.errors : ''
+        ].filter(Boolean).forEach(function (line) {
+          var d = document.createElement('div'); d.textContent = line; facts.appendChild(d);
+        });
+        card.appendChild(facts);
+
+        var acts = document.createElement('div'); acts.className = 'acts';
+        var tog = document.createElement('button'); tog.className = 'btn g'; tog.type = 'button';
+        tog.textContent = p.done ? 'Reopen' : 'Mark handled';
+        tog.onclick = function () {
+          db.setProblemDone(p.id, !p.done).then(loadProblems)
+            .catch(function (err) { toast((err && err.message) || 'Could not save'); });
+        };
+        var one = document.createElement('button'); one.className = 'btn g'; one.type = 'button';
+        one.textContent = '📋 Copy';
+        one.onclick = function () { copyOut(problemText(p)); };
+        var del = document.createElement('button'); del.className = 'btn g'; del.type = 'button';
+        del.textContent = 'Delete';
+        del.onclick = function () {
+          ask('Delete this report for good?').then(function (ok) {
+            if (!ok) return;
+            db.deleteProblem(p.id).then(loadProblems)
+              .catch(function (err) { toast((err && err.message) || 'Could not delete'); });
+          });
+        };
+        acts.appendChild(tog); acts.appendChild(one); acts.appendChild(del);
+        card.appendChild(acts);
+        pad.appendChild(card);
+      });
+    }).catch(function (err) {
+      pad.textContent = 'Could not load the problem book — ' + ((err && err.message) || 'try again');
+    });
+  }
+
+  /* Copying inside a sandboxed embed is often refused, so when it is, the
+     text is put on screen ready to copy by hand instead of vanishing. */
+  function copyOut(text) {
+    var done = function () { toast('Copied — paste it to the developer.'); };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { showText(text); });
+        return;
+      }
+    } catch (e) {}
+    showText(text);
+  }
+  function showText(text) {
+    var sheet = document.createElement('div');
+    sheet.className = 'sheet'; sheet.style.zIndex = '93';
+    var card = document.createElement('div'); card.className = 'card';
+    var head = document.createElement('div'); head.className = 'chead';
+    var h2 = document.createElement('h2'); h2.textContent = 'Copy this';
+    var x = document.createElement('button'); x.type = 'button'; x.className = 'x'; x.textContent = '✕';
+    head.appendChild(h2); head.appendChild(x);
+    var body = document.createElement('div'); body.className = 'cbody';
+    var ta = document.createElement('textarea');
+    ta.readOnly = true; ta.value = text;
+    ta.style.cssText = 'min-height:260px;font-family:var(--mono);font-size:11.5px';
+    body.appendChild(ta);
+    card.appendChild(head); card.appendChild(body);
+    sheet.appendChild(card);
+    document.body.appendChild(sheet);
+    x.onclick = function () { sheet.remove(); };
+    sheet.onclick = function (e) { if (e.target === sheet) sheet.remove(); };
+    setTimeout(function () { try { ta.focus(); ta.select(); } catch (e) {} }, 40);
+  }
 
   function loadReports() {
     var pad = $('padRep');
@@ -2161,6 +2467,7 @@
     $('exp14').textContent = 'Clears itself on ' + d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
     tally();
     adminTab('ann');
+    try { loadProblems(); } catch (e) {}   // so the tab can wear its count
     show('vAnn');
   }
   window.addEventListener('hashchange', checkHash);

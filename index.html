@@ -109,6 +109,7 @@ addEventListener('error', function (e) {
               <div class="mhead" id="meMail"></div>
               <button type="button" id="mAdmin" hidden>Admin zone</button>
               <button type="button" id="mSettings">Settings</button>
+              <button type="button" id="mReport">⚠ Report a problem</button>
               <button type="button" id="mOut">Sign out</button>
             </div>
           </div>
@@ -255,8 +256,10 @@ addEventListener('error', function (e) {
       <button type="button" id="atAnn" role="tab" aria-selected="true">📣 Announce</button>
       <button type="button" id="atRep" role="tab" aria-selected="false">⚑ Reports</button>
       <button type="button" id="atMem" role="tab" aria-selected="false">👥 Members</button>
+      <button type="button" id="atPrb" role="tab" aria-selected="false">🛠 Problems<span class="pbadge" id="prbN" hidden></span></button>
     </div>
     <div class="adminpad" id="padRep" hidden></div>
+    <div class="adminpad" id="padPrb" hidden></div>
     <div class="adminpad" id="padMem" hidden>
       <input class="srch" id="memQ" type="search" placeholder="Search members by name…" aria-label="Search members">
       <div id="memList"></div>

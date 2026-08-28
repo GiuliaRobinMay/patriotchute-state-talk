@@ -460,7 +460,16 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
 .repcard .cnt{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;
   background:var(--redwash);color:var(--red2);border-radius:4px;padding:2px 7px}
 .repcard .bd{font-size:13.5px;color:var(--dim);border-left:2px solid var(--line2);padding-left:10px}
-.repcard .acts{display:flex;gap:8px}
+.repcard .acts{display:flex;gap:8px;flex-wrap:wrap}
+/* the problem book */
+.repcard.handled{opacity:.55}
+.repcard .cnt.auto{background:var(--panel2);color:var(--teal2)}
+.factlist{font-family:var(--mono);font-size:11px;line-height:1.65;color:var(--faint);
+  background:var(--voice-bg);border-radius:7px;padding:9px 11px;overflow-wrap:anywhere}
+.facts{display:flex;flex-direction:column;gap:7px}
+.reportlink{background:none;border:0;color:var(--red2);font-size:12.5px;cursor:pointer;
+  padding:8px 0 0;text-align:left;text-decoration:underline}
+.reportlink:hover{color:var(--text)}
 .repcard .acts .btn{padding:8px 13px;font-size:12.5px}
 .memrow{display:flex;align-items:center;gap:11px;background:var(--panel);border:1px solid var(--edge);
   border-radius:9px;padding:10px 13px}

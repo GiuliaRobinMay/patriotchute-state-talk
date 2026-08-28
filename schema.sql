@@ -260,3 +260,58 @@ end $$;
 --   update profiles set is_owner = true where name = 'Chas';
 --
 alter table profiles add column if not exists is_owner boolean not null default false;
+
+-- ── the problem book (build 59) ───────────────────────────────────
+-- Where trouble goes: what a member typed into "Report a problem", and
+-- what the app itself caught when something broke. Admins read it in the
+-- admin zone; nobody else can see a word of it.
+--
+-- Paste this whole block in the SQL editor; it is safe to run twice.
+
+create table if not exists problems (
+  id          bigint generated always as identity primary key,
+  member      uuid references auth.users on delete set null,
+  name        text,
+  kind        text not null default 'report',   -- 'report' = a person; 'auto' = the app
+  note        text check (char_length(note) <= 1200),
+  build       text,
+  room        text,
+  page        text,
+  device      text,                              -- "iPhone · Safari 17 · iOS 17.4"
+  agent       text,                              -- the raw browser line
+  screen      text,                              -- size, embedded or not, theme
+  errors      text,                              -- what the app caught, if anything
+  done        boolean not null default false,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists problems_time_idx on problems (created_at desc);
+alter table problems enable row level security;
+
+drop policy if exists "anyone reports a problem" on problems;
+drop policy if exists "admins read problems"     on problems;
+drop policy if exists "admins clear problems"    on problems;
+drop policy if exists "admins tick problems"     on problems;
+
+-- Sign-in itself is the thing most likely to break, and a member who
+-- cannot sign in has no account to write with — so a report may arrive
+-- without one. It may never claim to be from someone it isn't.
+create policy "anyone reports a problem" on problems
+  for insert to anon, authenticated with check (
+    member is null or member = auth.uid()
+  );
+
+create policy "admins read problems" on problems
+  for select to authenticated using (
+    exists (select 1 from profiles p where p.id = auth.uid() and p.is_host)
+  );
+
+create policy "admins tick problems" on problems
+  for update to authenticated using (
+    exists (select 1 from profiles p where p.id = auth.uid() and p.is_host)
+  );
+
+create policy "admins clear problems" on problems
+  for delete to authenticated using (
+    exists (select 1 from profiles p where p.id = auth.uid() and p.is_host)
+  );
