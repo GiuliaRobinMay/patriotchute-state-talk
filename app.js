@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 57';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 58';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   /* The countries sit under the states everywhere the states are listed.
@@ -598,17 +598,40 @@
       b.onclick = function () { openRoom(target); };
       return b;
     }
-    function group(text) {
-      var l = document.createElement('div'); l.className = 'rl'; l.textContent = text;
-      rail.appendChild(l);
+    /* A heading that folds its rooms away. Fifty-one states is a lot to
+       scroll past when the talk is in All USA, so each group remembers
+       whether it is open. Folded, it still says how many rooms are inside
+       and whether any of them has someone on the mic — and the room you
+       are standing in stays on the rail, so it never disappears. */
+    function group(text, key, list) {
+      var open = db.pref(key, true);
+      var live = list.filter(function (r) { return (hotVoice[r.a] || 0) > 0; }).length;
+
+      var h = document.createElement('button');
+      h.type = 'button';
+      h.className = 'rl rlx';
+      h.setAttribute('aria-expanded', String(open));
+      var car = document.createElement('span'); car.className = 'car';
+      car.textContent = open ? '▾' : '▸';
+      var tx = document.createElement('span');
+      tx.textContent = text + (open ? '' : ' · ' + list.length);
+      h.appendChild(car); h.appendChild(tx);
+      if (!open && live) {
+        var lv = document.createElement('span'); lv.className = 'rmic'; lv.textContent = '🎙';
+        lv.title = live === 1 ? '1 room is live' : live + ' rooms are live';
+        h.appendChild(lv);
+      }
+      h.onclick = function () { db.setPref(key, !open); drawRail(); };
+      rail.appendChild(h);
+
+      list.forEach(function (r) {
+        if (!open && r.a !== room.a) return;
+        rail.appendChild(railItem(roomName(r), r.a, r));
+      });
     }
     rail.appendChild(railItem('🇺🇸 All USA', 'US', USA));
-    group('All states');
-    S.forEach(function (s) { rail.appendChild(railItem(s.n, s.a, s)); });
-    if (C.length) {
-      group('Other countries');
-      C.forEach(function (c) { rail.appendChild(railItem(roomName(c), c.a, c)); });
-    }
+    group('All states', 'railStates', S);
+    if (C.length) group('Other countries', 'railCountries', C);
   }
 
 
@@ -1066,7 +1089,14 @@
     n.textContent = p.name + (p.you ? ' (you)' : '');
     if (p.admin) n.appendChild(adminStar());
     t.appendChild(n);
-    if (p.city) { var c = document.createElement('span'); c.className = 'c'; c.textContent = p.city; t.appendChild(c); }
+    /* In All USA everyone is from somewhere else, so say where; inside a
+       room they are all from there and the town alone is the useful part. */
+    var from = p.city || '';
+    if (room.a === 'US' && p.state) {
+      var h = byAbbr(p.state);
+      from = from ? from + ' · ' + (h.f || p.state) : (h.f ? h.f + ' ' + h.n : h.n);
+    }
+    if (from) { var c = document.createElement('span'); c.className = 'c'; c.textContent = from; t.appendChild(c); }
     row.appendChild(av); row.appendChild(t);
     /* No dot here: the 'Online' heading above already says who is online. */
     return row;
@@ -1115,12 +1145,6 @@
   }
 
   function loadMembers() {
-    if (room.a === 'US') {
-      members = me ? [{ id: me.id, name: me.name, city: me.city, bg: me.bg,
-                        fg: me.fg, photo: me.photo, online: true, you: true }] : [];
-      markOnline();
-      return;
-    }
     db.members(room.a, me).then(function (list) {
       members = list;
       markOnline();
@@ -1514,9 +1538,10 @@
   }
 
   function voiceFace(p) {
+    var mine = p.you || !!(me && p.uid && p.uid === me.id);
     return {
       name: p.name, bg: p.bg, fg: p.fg,
-      photo: p.you ? (me && me.photo) : (p.uid ? photoByUid[p.uid] : null)
+      photo: mine ? (me && me.photo) : (p.uid ? photoByUid[p.uid] : null)
     };
   }
 
@@ -1858,7 +1883,10 @@
   if (window.Voice && window.Voice.onEmote) {
     window.Voice.onEmote(function (fromId, emoji) {
       if (typeof emoji !== 'string' || emoji.length > 8) return;
-      var spots = document.querySelectorAll('[data-vid="' + fromId + '"]');
+      /* Their circle may be shared with their other tab — fly over the one
+         actually on screen. */
+      var seat = (window.Voice.seatFor && window.Voice.seatFor(fromId)) || fromId;
+      var spots = document.querySelectorAll('[data-vid="' + seat + '"]');
       if (!spots.length) return;
       [].slice.call(spots).forEach(function (spot) {
         var r = spot.getBoundingClientRect();

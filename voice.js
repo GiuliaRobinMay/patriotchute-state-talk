@@ -29,6 +29,7 @@
   var localCtx = null, localAn = null, localTalking = false;
   var peers = {};                       // remoteId -> {pc, audio, ctx, an, talking}
   var roles = {};                       // last seen role per presence key
+  var seatBy = {};                      // presence key -> the seat drawn for it
   var rafOn = false;
 
   var RTC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
@@ -62,6 +63,33 @@
           (k === myId ? localTalking : !!(peers[k] && peers[k].talking))
       });
     });
+    /* One person, one seat.
+       A phone talker is in the room twice at once — listening in the
+       community's embed and talking in the pop-out tab — because each tab
+       joins under its own key. The room must show them once, on the mic,
+       and never as a speaker plus a silent stranger wearing their name.
+       Tabs of one account collapse into the loudest of them, and if any of
+       them is this tab, the surviving seat is "you". */
+    var seen = {}, kept = [];
+    seatBy = {};
+    list.forEach(function (p) {
+      if (!p.uid) { kept.push(p); seatBy[p.id] = p.id; return; }   // preview has no account
+      var prev = seen[p.uid];
+      if (!prev) { seen[p.uid] = p; kept.push(p); seatBy[p.id] = p.id; return; }
+      var keep = (p.role === 'mic' && prev.role !== 'mic') ? p : prev;
+      var drop = keep === p ? prev : p;
+      keep.you = keep.you || drop.you;
+      keep.admin = keep.admin || drop.admin;
+      if (keep === p) { seen[p.uid] = p; kept[kept.indexOf(prev)] = p; }
+      /* Anything already pointing at the seat we just gave up follows it. */
+      Object.keys(seatBy).forEach(function (k) {
+        if (seatBy[k] === drop.id) seatBy[k] = keep.id;
+      });
+      seatBy[drop.id] = keep.id;
+      seatBy[keep.id] = keep.id;
+    });
+    list = kept;
+
     list.sort(function (a, b) {
       if (a.role !== b.role) return a.role === 'mic' ? -1 : 1;
       if (a.role === 'listen' && a.hand !== b.hand) return a.hand ? -1 : 1;
@@ -524,6 +552,9 @@
     onEmote: function (cb) { emoteCb = cb || function () {}; },
 
     myKey: function () { return myId; },
+    /* Which circle stands for a given tab — the tab's own, unless it was
+       folded into another tab of the same account. */
+    seatFor: function (id) { return seatBy[id] || id; },
     active: function () { return myRole === 'mic'; },
     present: function () { return !!myRole; },
     resume: resume

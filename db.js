@@ -641,18 +641,22 @@
         return function () { client.removeChannel(ch); };
       },
 
+      /* All USA is the room the whole community shares, so its sidebar is
+         the whole community — every other room is the people who live in
+         it. Members read profiles by policy, so this needs no privilege. */
       members: function (state, me) {
-        return client.from('profiles')
-          .select('id, name, city, bg, fg, photo, is_host')
-          .eq('state', state)
+        var q = client.from('profiles')
+          .select('id, name, city, state, bg, fg, photo, is_host');
+        if (state !== 'US') q = q.eq('state', state);
+        return q
           .order('updated_at', { ascending: false })
           .limit(500)
           .then(function (r) {
             if (r.error) throw r.error;
             return r.data.map(function (p) {
               return {
-                id: p.id, name: p.name, city: p.city, bg: p.bg, fg: p.fg,
-                photo: p.photo, admin: p.is_host,
+                id: p.id, name: p.name, city: p.city, state: p.state,
+                bg: p.bg, fg: p.fg, photo: p.photo, admin: p.is_host,
                 you: p.id === uid, online: p.id === uid
               };
             });
