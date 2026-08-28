@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 61';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 62';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   /* The countries sit under the states everywhere the states are listed.
@@ -1061,9 +1061,12 @@
       var e = m.reacts[em];
       var chip = document.createElement('button');
       chip.type = 'button';
-      chip.className = 'rc' + (e.mine ? ' mine' : '');
+      chip.className = 'rc' + (e.mine ? ' mine' : '') + (m.mine ? ' seen' : '');
       chip.textContent = em + ' ' + e.n;
-      chip.onclick = function () { toggleReact(m, em); };
+      /* On your own message the chips are a tally of what others thought,
+         not buttons — otherwise tapping one would hand you your own. */
+      if (m.mine) { chip.disabled = true; chip.title = 'What others thought of this'; }
+      else chip.onclick = function () { toggleReact(m, em); };
       row.appendChild(chip);
     });
     bEl.appendChild(row);
@@ -1096,7 +1099,7 @@
 
   function startReply(m) {
     replyingTo = m;
-    $('rbWho').textContent = m.mine ? 'yourself' : m.name;
+    $('rbWho').textContent = m.name;
     $('rbTx').textContent = m.text.length > 60 ? m.text.slice(0, 60) + '…' : m.text;
     $('rbar').hidden = false;
     $('ci').focus();
@@ -1124,7 +1127,9 @@
     var tm = document.createElement('span'); tm.className = 'tm'; tm.textContent = clock(m.ts);
     h.appendChild(tm);
 
-    if (m.id && db.shared) {
+    /* Nothing you can do to your own message: no cheering for yourself,
+       no answering yourself, and nothing to report. */
+    if (!m.mine && m.id && db.shared) {
       var rx = document.createElement('button');
       rx.type = 'button'; rx.className = 'rep';
       rx.title = 'React to this message';
