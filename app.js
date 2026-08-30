@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 64';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 65';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   /* The countries sit under the states everywhere the states are listed.
@@ -864,6 +864,9 @@
     show('vRoom');
 
     if (inCall) leaveVoice();
+    /* Switching rooms leaves the old room's talk. (Closing the Talk Time
+       view no longer does, so this is the one place it happens.) */
+    if (window.Voice && window.Voice.unlisten) window.Voice.unlisten();
     stopPeek(); stopPeek = function () {};
     stopMessages(); stopPresence(); stopVoiceWatch(); stopReacts();
     onlineIds = {};
@@ -896,6 +899,8 @@
     }, function (goneId) {
       var el = $('chat').querySelector('[data-id="' + goneId + '"]');
       if (el) el.remove();
+      var sEl = $('sideChat').querySelector('[data-sid="' + goneId + '"]');
+      if (sEl) sEl.remove();
       delete msgIndex[goneId];
     });
 
@@ -947,7 +952,7 @@
     var re = /(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+\.[^\s<>"']{2,})/g;
     var last = 0, m2, first = '';
     while ((m2 = re.exec(text)) !== null) {
-      if (m2.index > last) el.appendChild(document.createTextNode(text.slice(last, m2.index)));
+      if (m2.index > last) appendText(el, text.slice(last, m2.index));
       var raw = m2[0];
       /* A sentence's closing punctuation is not part of the address. */
       var trimmed = raw.replace(/[.,;:!?)\]]+$/, '');
@@ -963,7 +968,7 @@
       }
       last = m2.index + raw.length;
     }
-    if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
+    if (last < text.length) appendText(el, text.slice(last));
     return first;
   }
 
@@ -1112,7 +1117,9 @@
   $('rbX').onclick = clearReply;
 
   function messageEl(m) {
-    var wrap = document.createElement('div'); wrap.className = 'm' + (m.mine ? ' mine' : '');
+    var wrap = document.createElement('div');
+    wrap.className = 'm' + (m.mine ? ' mine' : '') +
+      (!m.mine && mentionsMe(m.text) ? ' mentioned' : '');
     if (m.id) wrap.dataset.id = m.id;
     var b = document.createElement('div'); b.className = 'b';
     var h = document.createElement('div'); h.className = 'h';
@@ -1200,6 +1207,37 @@
     return wrap;
   }
 
+  /* ── the same conversation, small, beside the talk ───────────────
+     Not a second chat room: the very same messages, drawn plainly so
+     they fit in the side column while people are listening. */
+  function sideMessageEl(m) {
+    var row = document.createElement('div');
+    row.className = 'sm2' + (m.mine ? ' mine' : '');
+    if (m.id) row.dataset.sid = m.id;
+    var av = document.createElement('span'); av.className = 'av xs';
+    avatar(av, m);
+    var t = document.createElement('span'); t.className = 't';
+    var n = document.createElement('span'); n.className = 'n';
+    n.textContent = m.mine ? 'You' : m.name;
+    var tm = document.createElement('span'); tm.className = 'tm'; tm.textContent = clock(m.ts);
+    n.appendChild(tm);
+    var x = document.createElement('span'); x.className = 'x';
+    linkify(x, m.text);
+    t.appendChild(n); t.appendChild(x);
+    row.appendChild(av); row.appendChild(t);
+    return row;
+  }
+
+  function sideAppend(m) {
+    var box = $('sideChat');
+    var none = box.querySelector('.none');
+    if (none) none.remove();
+    var el = sideMessageEl(m);
+    box.appendChild(el);
+    box.scrollTop = box.scrollHeight;
+    return el;
+  }
+
   function appendMessage(m) {
     var chat = $('chat');
     var empty = chat.querySelector('.sys.empty');
@@ -1207,26 +1245,42 @@
     if (m.id) msgIndex[m.id] = m;
     var el = messageEl(m);
     chat.appendChild(el);
+    el._side = sideAppend(m);        // the small copy, kept in step
+    /* Being spoken to by name should reach you even when you are watching
+       the stage rather than the words. */
+    if (!m.mine && mentionsMe(m.text) && (talkOpen || sideView !== 'chat')) {
+      toast(m.name + ' mentioned you in the chat');
+    }
     return el;
   }
 
   function loadChat() {
-    var chat = $('chat');
+    var chat = $('chat'), side = $('sideChat');
     chat.textContent = '';
+    side.textContent = '';
     msgIndex = {};
     db.messages(room.a).then(function (msgs) {
       chat.textContent = '';
+      side.textContent = '';
       if (!msgs.length) {
         var e = document.createElement('div');
         e.className = 'sys empty';
         e.textContent = 'Nothing here yet. Say hello to ' + room.n + '.';
         chat.appendChild(e);
+        var e2 = document.createElement('p');
+        e2.className = 'none';
+        e2.textContent = 'Nothing said yet — start it off.';
+        side.appendChild(e2);
         return;
       }
       /* Index first, so a reply can quote a message further down the list. */
       msgs.forEach(function (m) { if (m.id) msgIndex[m.id] = m; });
-      msgs.forEach(function (m) { chat.appendChild(messageEl(m)); });
+      msgs.forEach(function (m) {
+        chat.appendChild(messageEl(m));
+        side.appendChild(sideMessageEl(m));
+      });
       chat.scrollTop = chat.scrollHeight;
+      side.scrollTop = side.scrollHeight;
     }).catch(function (err) {
       chat.textContent = '';
       var e = document.createElement('div');
@@ -1236,11 +1290,9 @@
     });
   }
 
-  $('cmp').onsubmit = function (e) {
-    e.preventDefault();
-    var i = $('ci'), text = i.value.trim();
+  /* One way to send, whichever box it was typed in. */
+  function sendMessage(text) {
     if (!text || !me) return;
-    i.value = '';
     var msg = {
       name: me.name, city: me.city, photo: me.photo,
       bg: me.bg, fg: me.fg, text: text, ts: Date.now(), mine: true,
@@ -1258,13 +1310,213 @@
       msgIndex[msg.id] = msg;
       var el2 = messageEl(msg);
       el.replaceWith(el2);
+      if (el._side) {
+        var s2 = sideMessageEl(msg);
+        el._side.replaceWith(s2);
+        el2._side = s2;
+      }
     }).catch(function (err) {
       var e2 = document.createElement('div');
       e2.className = 'sys';
       e2.textContent = 'That message did not send — ' + ((err && err.message) || 'check your connection');
       $('chat').appendChild(e2);
     });
+  }
+
+  $('cmp').onsubmit = function (e) {
+    e.preventDefault();
+    var i = $('ci'), text = i.value.trim();
+    if (!text) return;
+    i.value = '';
+    hideMentions();
+    sendMessage(text);
   };
+
+  $('sideCmp').onsubmit = function (e) {
+    e.preventDefault();
+    var i = $('sci'), text = i.value.trim();
+    if (!text) return;
+    i.value = '';
+    hideMentions();
+    sendMessage(text);
+  };
+
+  /* ── the side column's two faces ─────────────────────────────────
+     People, ordinarily. The chat while Talk Time is on, so nobody has to
+     choose between hearing the talk and having their say. */
+  var sideView = 'people';
+  function setSideView(which) {
+    sideView = which;
+    var chatOn = which === 'chat';
+    $('whoList').hidden = chatOn;
+    $('sideChat').hidden = !chatOn;
+    $('sideCmp').hidden = !chatOn || !me;
+    $('sideChatTab').setAttribute('aria-selected', String(chatOn));
+    $('sidePplTab').setAttribute('aria-selected', String(!chatOn));
+    if (chatOn) { var b = $('sideChat'); b.scrollTop = b.scrollHeight; }
+  }
+  $('sideChatTab').onclick = function () { setSideView('chat'); };
+  $('sidePplTab').onclick = function () { setSideView('people'); };
+
+  /* ── speaking to someone by name ─────────────────────────────────
+     Type @ and the room's own people are offered. What goes into the
+     message is just their name, so it reads as plainly to somebody on a
+     phone as it does here — but the app knows the names of the room, and
+     paints them, and paints yours brighter still. */
+  function roomNames() {
+    var names = members.map(function (p) { return p.name; });
+    lastVoiceList.forEach(function (p) {           // whoever is in the talk, too
+      if (p.name && names.indexOf(p.name) === -1 && !p.you) names.push(p.name);
+    });
+    /* And whoever has spoken here: the member list arrives on its own
+       schedule, and a name should not go unpainted while it is on its way. */
+    Object.keys(msgIndex).forEach(function (id) {
+      var n = msgIndex[id] && msgIndex[id].name;
+      if (n && names.indexOf(n) === -1) names.push(n);
+    });
+    if (me && names.indexOf(me.name) === -1) names.push(me.name);
+    return names.filter(Boolean);
+  }
+
+  function esc(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+  /* Longest first, so "@Giulia May" wins over "@Giulia". */
+  function mentionRe() {
+    var names = roomNames().slice().sort(function (a, b) { return b.length - a.length; });
+    if (!names.length) return null;
+    return new RegExp('@(' + names.map(esc).join('|') + ')(?![\\w])', 'g');
+  }
+
+  function mentionsMe(text) {
+    if (!me || !text) return false;
+    return new RegExp('@' + esc(me.name) + '(?![\\w])').test(text);
+  }
+
+  /* Plain words, with any name in them turned into a chip. */
+  function appendText(el, text) {
+    var re = mentionRe();
+    if (!re) { el.appendChild(document.createTextNode(text)); return; }
+    var last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > last) el.appendChild(document.createTextNode(text.slice(last, m.index)));
+      var chip = document.createElement('span');
+      chip.className = 'mention' + (me && m[1] === me.name ? ' you' : '');
+      chip.textContent = '@' + m[1];
+      el.appendChild(chip);
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
+  }
+
+  /* When the room's people arrive after its words did, the names already
+     on screen are painted then — surgically, so the quotes and the link
+     cards drawn around them are left exactly as they are. */
+  function chipTextNodes(root) {
+    if (!mentionRe()) return;
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    var nodes = [], n;
+    while ((n = walker.nextNode())) {
+      if (n.nodeValue.indexOf('@') === -1) continue;
+      var p = n.parentNode;
+      if (p && p.closest && p.closest('.qt,.lcard,a,.mention')) continue;
+      nodes.push(n);
+    }
+    nodes.forEach(function (node) {
+      var frag = document.createDocumentFragment();
+      appendText(frag, node.nodeValue);
+      node.parentNode.replaceChild(frag, node);
+    });
+  }
+  function repaintMentions() {
+    chipTextNodes($('chat'));
+    chipTextNodes($('sideChat'));
+  }
+
+  var mentionBox = null, mentionFor = null, mentionAt = -1, mentionPick = 0, mentionList = [];
+
+  function hideMentions() {
+    if (mentionBox) mentionBox.hidden = true;
+    mentionFor = null; mentionAt = -1; mentionList = [];
+  }
+
+  function drawMentions() {
+    var box = mentionBox || (mentionBox = $('mentionMenu'));
+    box.textContent = '';
+    mentionList.forEach(function (name, i) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = i === mentionPick ? 'on' : '';
+      var av = document.createElement('span'); av.className = 'av xs';
+      var who = members.filter(function (p) { return p.name === name; })[0];
+      if (!who) { var c = colorFor(name); who = { name: name, bg: c.bg, fg: c.fg }; }
+      avatar(av, who);
+      var nm = document.createElement('span'); nm.className = 'nm2'; nm.textContent = name;
+      b.appendChild(av); b.appendChild(nm);
+      if (who.city) { var ct = document.createElement('span'); ct.className = 'ct'; ct.textContent = who.city; b.appendChild(ct); }
+      b.onmousedown = function (e) { e.preventDefault(); choose(i); };
+      box.appendChild(b);
+    });
+    box.hidden = false;
+    var r = mentionFor.getBoundingClientRect();
+    box.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 270)) + 'px';
+    box.style.top = 'auto';
+    box.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+  }
+
+  function choose(i) {
+    var name = mentionList[i];
+    if (!name || !mentionFor) return;
+    var v = mentionFor.value;
+    var end = mentionFor.selectionStart;
+    mentionFor.value = v.slice(0, mentionAt) + '@' + name + ' ' + v.slice(end);
+    var at = mentionAt + name.length + 2;
+    try { mentionFor.setSelectionRange(at, at); } catch (e) {}
+    mentionFor.focus();
+    hideMentions();
+  }
+
+  /* What sits between the last @ and the cursor, if anything does. */
+  function mentionQuery(input) {
+    var v = input.value, end = input.selectionStart;
+    if (typeof end !== 'number') return null;
+    var at = v.lastIndexOf('@', end - 1);
+    if (at === -1) return null;
+    if (at > 0 && /[\w@]/.test(v.charAt(at - 1))) return null;   // an email, not a mention
+    var typed = v.slice(at + 1, end);
+    if (/[\n]/.test(typed) || typed.length > 30) return null;
+    return { at: at, typed: typed };
+  }
+
+  function watchMentions(input) {
+    function update() {
+      var q = mentionQuery(input);
+      if (!q) { hideMentions(); return; }
+      var typed = q.typed.toLowerCase();
+      var names = roomNames().filter(function (n) {
+        if (me && n === me.name) return false;              // no need to call yourself
+        if (!typed) return true;
+        return n.toLowerCase().indexOf(typed) === 0 ||
+               n.toLowerCase().split(/\s+/).some(function (w) { return w.indexOf(typed) === 0; });
+      });
+      if (!names.length) { hideMentions(); return; }
+      mentionFor = input; mentionAt = q.at;
+      mentionList = names.slice(0, 6);
+      if (mentionPick >= mentionList.length) mentionPick = 0;
+      drawMentions();
+    }
+    input.addEventListener('input', function () { mentionPick = 0; update(); });
+    input.addEventListener('click', update);
+    input.addEventListener('blur', function () { setTimeout(hideMentions, 120); });
+    input.addEventListener('keydown', function (e) {
+      if (!mentionList.length || mentionFor !== input) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); mentionPick = (mentionPick + 1) % mentionList.length; drawMentions(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); mentionPick = (mentionPick + mentionList.length - 1) % mentionList.length; drawMentions(); }
+      else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); choose(mentionPick); }
+      else if (e.key === 'Escape') { hideMentions(); }
+    });
+  }
+  watchMentions($('ci'));
+  watchMentions($('sci'));
 
   /* ── who's here ──────────────────────────────────────────────── */
   var OFFLINE_SHOWN = 40;
@@ -1341,6 +1593,7 @@
     db.members(room.a, me).then(function (list) {
       members = list;
       markOnline();
+      repaintMentions();          // names the words arrived before
     }).catch(function () { members = []; drawWho(); });
   }
 
@@ -1899,6 +2152,10 @@
         ? 'Speaking happens in its own tab for now — the chat stays here'
         : 'Speak to the room');
     $('talkMute').hidden = !inCall;
+    var inTalk = !!(window.Voice && window.Voice.present && window.Voice.present());
+    $('talkLeave').hidden = !inTalk;
+    /* And the tab wears a mark while you are in a talk you cannot see. */
+    $('tabTalk').classList.toggle('inroom', inTalk && !talkOpen);
     updateSignals();
   }
 
@@ -1986,14 +2243,26 @@
     document.querySelector('.voice').hidden = open;
     $('tabChat').setAttribute('aria-selected', String(!open));
     $('tabTalk').setAttribute('aria-selected', String(open));
-    if (db.shared && window.Voice && me) {
-      if (open) window.Voice.listen(room.a, me);
-      else if (!inCall) window.Voice.unlisten();
-    }
+    document.querySelector('.room').classList.toggle('talking', open);
+    /* Opening Talk Time seats you as a listener. Stepping back to the chat
+       does NOT stand you up: the talk carries on in your ears while you
+       type, which is the whole point of the chat beside it. You leave by
+       saying so, or by leaving the room. */
+    if (db.shared && window.Voice && me && open) window.Voice.listen(room.a, me);
+    /* The side column follows: the chat while a talk is on, the people
+       when it is not — either way both are one tap apart. */
+    setSideView(open ? 'chat' : 'people');
     if (open) loadUpcoming();
     else { unreadTab = 0; }
     renderVoice(lastVoiceList);
   }
+
+  $('talkLeave').onclick = function () {
+    if (inCall) leaveVoice();
+    if (window.Voice && window.Voice.unlisten) window.Voice.unlisten();
+    showTalk(false);
+    toast('You have left Talk Time. The chat is still here.');
+  };
   $('tabChat').onclick = function () { showTalk(false); };
   $('tabTalk').onclick = function () { showTalk(true); };
 
