@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 65';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 66';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   /* The countries sit under the states everywhere the states are listed.
@@ -1346,8 +1346,13 @@
      choose between hearing the talk and having their say. */
   var sideView = 'people';
   function setSideView(which) {
+    /* Outside Talk Time there is only one chat, the big one. Offering a
+       second copy of it beside itself is just two chats to choose between,
+       so the whole choice disappears until a talk is on. */
+    if (!talkOpen) which = 'people';
     sideView = which;
     var chatOn = which === 'chat';
+    document.querySelector('.sidetabs').hidden = !talkOpen;
     $('whoList').hidden = chatOn;
     $('sideChat').hidden = !chatOn;
     $('sideCmp').hidden = !chatOn || !me;
