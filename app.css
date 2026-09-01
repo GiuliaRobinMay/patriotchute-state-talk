@@ -434,10 +434,16 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
 
 
 /* ── room switcher: your state ↔ the national room ─────────────── */
+/* Two pills, one rule: the half you are standing in is filled red, and
+   the half you are not is quiet. Where you are should never be a matter
+   of noticing which shade is slightly lighter. */
 .rswitch{display:flex;border:1px solid var(--edge);border-radius:18px;overflow:hidden;flex:0 0 auto}
-.rswitch button{background:none;border:0;color:var(--dim);font-size:12px;font-weight:600;
+.rswitch button{background:none;border:0;color:var(--dim);font-size:12px;font-weight:700;
   padding:6px 12px;cursor:pointer;white-space:nowrap}
-.rswitch button[aria-selected="true"]{background:var(--panel2);color:var(--paper)}
+.rswitch button:hover{background:var(--panel);color:var(--text)}
+.rswitch button[aria-selected="true"]{background:var(--red);color:#FDF9F5}
+.rswitch button[aria-selected="true"]:hover{background:var(--red);color:#FDF9F5}
+.rswitch button[aria-selected="true"] .pbadge{background:#FDF9F5;color:var(--red)}
 @media (max-width:600px){.rswitch button{padding:6px 8px;font-size:11px}}
 
 /* the gather line on a pinned notice */
@@ -459,11 +465,13 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
 #tabTalk{border-radius:0 18px 18px 0;color:var(--red2)}
 #tabChat:hover{background:rgba(124,192,205,.12)}
 #tabTalk:hover{background:var(--redwash)}
-#tabChat[aria-selected="true"]{background:var(--teal2);border-color:var(--teal2);color:var(--nav)}
+/* The half you are in is filled red in both pills; the half you are not
+   keeps only a hint of its own colour. */
+#tabChat[aria-selected="true"],
 #tabTalk[aria-selected="true"]{background:var(--red);border-color:var(--red);color:#FDF9F5}
 /* on a filled half the badges must not vanish into the colour */
 #tabTalk[aria-selected="true"] .livedot{background:#FDF9F5}
-#tabChat[aria-selected="true"] .pbadge{background:var(--nav);color:var(--teal2)}
+#tabChat[aria-selected="true"] .pbadge{background:#FDF9F5;color:var(--red)}
 /* you are in a talk you are not looking at */
 #tabTalk.inroom{background:var(--redwash);box-shadow:inset 0 0 0 1px var(--red)}
 .talk{flex:1;display:flex;flex-direction:column;gap:22px;padding:20px;overflow-y:auto;min-height:0}
