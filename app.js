@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 66';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 67';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   /* The countries sit under the states everywhere the states are listed.
@@ -914,25 +914,11 @@
       stopPresence = db.onPresence(s.a, me, function (people) {
         onlineIds = {};
         people.forEach(function (p) { onlineIds[p.id] = true; });
-        /* The national room has no state to look members up by, so whoever
-           presence says is here IS the roster. */
-        if (room.a === 'US') {
-          members = people.map(function (p) {
-            var you = me && p.id === me.id;
-            return { id: p.id, name: p.name || 'Someone', city: p.city,
-                     bg: p.bg, fg: p.fg, admin: p.admin,
-                     photo: you ? me.photo : (photoByUid[p.id] || null),
-                     online: true, you: you };
-          });
-          markOnline();
-          fillPhotosFor(people.map(function (p) { return p.id; }), function () {
-            members.forEach(function (mm) {
-              if (!mm.photo) mm.photo = photoByUid[mm.id] || null;
-            });
-            markOnline();
-          });
-          return;
-        }
+        /* Presence says who is HERE. It never says who the room's people
+           are — All USA included, where the roster is the whole community
+           and was fetched as such. Letting presence stand in for the
+           roster there meant sitting alone in the national room and being
+           told that is everyone. */
         /* Somebody online who wasn't in the list means a new member joined
            after this page loaded. Without this the roster stayed frozen at
            whoever existed when you opened the room. */
