@@ -219,16 +219,21 @@ button,input,select,textarea{font-family:inherit}
    comes out entirely and the state name carries the identity of the room. */
 .room.solo{grid-template-columns:1fr 5px var(--sidew,200px)}
 .room.solo .rail{display:none}
-/* The rooms list, folded out of the way. A hidden grid item is not a
-   narrow one — it leaves the grid entirely, and the columns behind it
-   shuffle up — so the folded shape declares three columns, not four with
-   a nothing at the front. */
-.room.railshut{grid-template-columns:1fr 5px var(--sidew,186px)}
+/* The rooms slide away to the left, leaving a thin strip behind with the
+   arrow that slides them back. A hidden grid item leaves the grid entirely
+   rather than becoming a narrow one, so each shape names its own first
+   column: the list, or the strip standing in for it. */
+.room.railshut{grid-template-columns:26px 1fr 5px var(--sidew,186px)}
 .room.railshut .rail{display:none}
-.railbtn{background:none;border:1px solid var(--edge);border-radius:7px;color:var(--dim);
-  font-size:14px;line-height:1;padding:6px 9px;cursor:pointer;flex:0 0 auto}
-.railbtn:hover{background:var(--panel);color:var(--text)}
-.railbtn[aria-expanded="false"]{border-color:var(--line2);color:var(--paper);background:var(--panel)}
+.railpeek{border-right:1px solid var(--line);background:var(--deep);
+  display:flex;justify-content:center;padding-top:12px}
+.railpeek button{background:var(--panel);border:1px solid var(--edge);border-radius:6px;
+  color:var(--paper);font-size:15px;line-height:1;padding:4px 6px;cursor:pointer;height:28px}
+.railpeek button:hover{background:var(--panel2);border-color:var(--line2)}
+/* the arrow that slides them away, at the head of the list it belongs to */
+.railfold{background:none;border:1px solid var(--edge);border-radius:6px;color:var(--dim);
+  font-size:14px;line-height:1;padding:4px 8px;margin:0 0 6px auto;cursor:pointer;flex:0 0 auto}
+.railfold:hover{background:var(--panel);color:var(--paper);border-color:var(--line2)}
 
 /* the grip between the conversation and the side column */
 .grip{cursor:col-resize;background:var(--line);position:relative;touch-action:none}
@@ -240,7 +245,8 @@ button,input,select,textarea{font-family:inherit}
    of growing with its messages — without it, a long conversation pushes
    the composer right out of the bottom of the embed. */
 .mid{display:flex;flex-direction:column;min-width:0;min-height:0}
-.top{padding:13px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+.top{padding:10px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+.top .spacer{flex:1}
 .top .ttl{display:flex;flex-direction:column;min-width:0;flex:1}
 .top h1{font-family:var(--display);font-size:19px;font-weight:800;letter-spacing:-.03em;color:var(--paper);
   margin:0;line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -423,8 +429,7 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
 
 @media (max-width:860px){
   .room{grid-template-columns:1fr}
-  .rail,aside.who,.grip{display:none}
-  .railbtn{display:none}
+  .rail,aside.who,.grip,.railpeek{display:none}
   /* ...except during Talk Time, where typing alongside the talk is the
      whole point. It sits under the stage instead of beside it. */
   .room{grid-template-columns:1fr}

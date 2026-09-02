@@ -86,17 +86,19 @@ addEventListener('error', function (e) {
   <!-- ── A ROOM ── -->
   <section class="view" id="vRoom" aria-label="Room">
     <div class="room">
+      <!-- When the rooms are slid away, this thin strip is what stays
+           behind to slide them back. -->
+      <div class="railpeek" id="railPeek" hidden>
+        <button type="button" id="railOpen" title="Show the rooms again">›</button>
+      </div>
+
       <nav class="rail" id="rail" aria-label="All rooms"></nav>
 
       <div class="mid">
         <div class="top">
-          <button class="railbtn" type="button" id="railBtn" hidden aria-expanded="true"
-            title="Show or hide the list of rooms">☰</button>
-          <span class="av" id="tAb" style="background:#BF3B2E;color:#FBF8F2">OH</span>
-          <div class="ttl">
-            <h1 id="tNm">Ohio</h1>
-            <span class="meta" id="tCt"></span>
-          </div>
+          <!-- The room says its own name on the switcher to the right, in
+               red, so the badge and the heading that repeated it are gone. -->
+          <span class="spacer"></span>
           <div class="rswitch" role="tablist" aria-label="Rooms">
             <button type="button" id="rsUsa" role="tab" aria-selected="true" title="The room the whole community shares"><span id="rsUsaTxt">🇺🇸 All USA</span><span class="pmic" id="rsUsaMic" hidden>🎙</span><span class="pbadge" id="rsUsaN" hidden></span></button>
             <button type="button" id="rsState" role="tab" aria-selected="false" title="Your own room"><span id="rsStateTxt">Your state</span><span class="pmic" id="rsStateMic" hidden>🎙</span><span class="pbadge" id="rsStateN" hidden></span></button>

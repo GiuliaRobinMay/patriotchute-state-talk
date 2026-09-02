@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 69';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 71';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   /* The countries sit under the states everywhere the states are listed.
@@ -753,15 +753,15 @@
      the width — and the button to bring it back sits in the top bar, so it
      is never hidden along with what it hides. */
   function drawRailShut() {
-    var shut = db.pref('railShut', false);
-    document.querySelector('.room').classList.toggle('railshut', !!shut);
-    var b = $('railBtn');
-    b.hidden = !(me && me.host);
-    b.setAttribute('aria-expanded', String(!shut));
-    b.title = shut ? 'Show the list of rooms' : 'Hide the list of rooms';
+    var shut = !!db.pref('railShut', false);
+    var admin = !!(me && me.host);
+    document.querySelector('.room').classList.toggle('railshut', shut);
+    /* Members have no rooms list, so they get neither the list nor the
+       strip that stands in for it. */
+    $('railPeek').hidden = !(admin && shut);
   }
-  $('railBtn').onclick = function () {
-    db.setPref('railShut', !db.pref('railShut', false));
+  $('railOpen').onclick = function () {
+    db.setPref('railShut', false);
     drawRailShut();
   };
 
@@ -878,26 +878,29 @@
         rail.appendChild(railItem(roomName(r), r.a, r));
       });
     }
+    /* The way to fold this away belongs at the top of the thing it folds,
+       where anyone looking at the list will find it. (The ☰ in the top bar
+       is how it comes back once it is gone.) */
+    var fold = document.createElement('button');
+    fold.type = 'button';
+    fold.className = 'railfold';
+    fold.title = 'Slide the rooms out of the way';
+    fold.setAttribute('aria-label', 'Hide the list of rooms');
+    fold.textContent = '‹';
+    fold.onclick = function () { db.setPref('railShut', true); drawRailShut(); };
+    rail.appendChild(fold);
+
     rail.appendChild(railItem('🇺🇸 All USA', 'US', USA));
     group('All states', 'railStates', S);
     if (C.length) group('Other countries', 'railCountries', C);
   }
 
 
-  function setTitle() {
-    var online = members.filter(function (p) { return p.online; }).length || (me ? 1 : 0);
-    $('tNm').textContent = room.n;
-    /* A country shows its flag where a state shows its code — nobody
-       should ever have to decode "CN" as Canada. */
-    $('tAb').textContent = room.f || room.a;
-    if (room.a === 'US') {
-      $('tCt').textContent = 'the whole community · ' + online + ' here now';
-      return;
-    }
-    $('tCt').textContent = members.length
-      ? members.length.toLocaleString('en-US') + (members.length === 1 ? ' member · ' : ' members · ') + online + ' online now'
-      : 'you are the first one here';
-  }
+  /* The room's name and its headcount used to sit in the top bar, beside a
+     badge repeating its code. The switcher says which room you are in, in
+     red, and the people column counts who is here — so the top bar carries
+     neither any more, and the width goes to the conversation. */
+  function setTitle() {}
 
   function openRoom(s) {
     room = s;
