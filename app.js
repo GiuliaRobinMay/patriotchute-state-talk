@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var BUILD = 'build 68';   // bump on every deploy — shown on the sign-in screen and in the name menu
+  var BUILD = 'build 69';   // bump on every deploy — shown on the sign-in screen and in the name menu
 
   var S = window.STATES, COLORS = window.AV_COLORS;
   /* The countries sit under the states everywhere the states are listed.
@@ -749,6 +749,69 @@
     }).catch(function () { countsAt = 0; });
   }
 
+  /* The rooms list folds out of the way, for anyone who would rather have
+     the width — and the button to bring it back sits in the top bar, so it
+     is never hidden along with what it hides. */
+  function drawRailShut() {
+    var shut = db.pref('railShut', false);
+    document.querySelector('.room').classList.toggle('railshut', !!shut);
+    var b = $('railBtn');
+    b.hidden = !(me && me.host);
+    b.setAttribute('aria-expanded', String(!shut));
+    b.title = shut ? 'Show the list of rooms' : 'Hide the list of rooms';
+  }
+  $('railBtn').onclick = function () {
+    db.setPref('railShut', !db.pref('railShut', false));
+    drawRailShut();
+  };
+
+  /* The grip between the conversation and the side column. Dragging it
+     gives one what the other gives up, and the choice is remembered. */
+  function applySideWidth() {
+    var w = db.pref('sideWidth', 0);
+    if (w) document.querySelector('.room').style.setProperty('--sidew', w + 'px');
+  }
+  (function dragGrip() {
+    var grip = $('grip'), room = document.querySelector('.room');
+    var dragging = false;
+    function widthFrom(x) {
+      var r = room.getBoundingClientRect();
+      /* measured from the right edge, since that is the side it belongs to */
+      return Math.max(180, Math.min(560, Math.round(r.right - x)));
+    }
+    function move(e) {
+      if (!dragging) return;
+      var x = e.touches ? e.touches[0].clientX : e.clientX;
+      room.style.setProperty('--sidew', widthFrom(x) + 'px');
+      if (e.cancelable) e.preventDefault();
+    }
+    function stop() {
+      if (!dragging) return;
+      dragging = false;
+      grip.classList.remove('dragging');
+      room.classList.remove('dragging');
+      var now = room.style.getPropertyValue('--sidew');
+      db.setPref('sideWidth', parseInt(now, 10) || 0);
+    }
+    function start(e) {
+      dragging = true;
+      grip.classList.add('dragging');
+      room.classList.add('dragging');
+      move(e);
+    }
+    grip.addEventListener('mousedown', start);
+    grip.addEventListener('touchstart', start, { passive: false });
+    window.addEventListener('mousemove', move);
+    window.addEventListener('touchmove', move, { passive: false });
+    window.addEventListener('mouseup', stop);
+    window.addEventListener('touchend', stop);
+    /* A double tap puts it back where it started. */
+    grip.addEventListener('dblclick', function () {
+      room.style.removeProperty('--sidew');
+      db.setPref('sideWidth', 0);
+    });
+  })();
+
   function drawRail() {
     var rail = $('rail');
     rail.textContent = '';
@@ -842,6 +905,8 @@
 
     document.querySelector('.room').classList.toggle('solo', !(me && me.host));
     if (me && me.host) { drawRail(); loadRailCounts(); }
+    drawRailShut();
+    applySideWidth();
 
     $('ci').placeholder = 'Message ' + s.n + '…';
     setTitle();
@@ -1520,7 +1585,12 @@
     avatar(av, p);
     var t = document.createElement('span'); t.className = 't';
     var n = document.createElement('span'); n.className = 'n';
-    n.textContent = p.name + (p.you ? ' (you)' : '');
+    n.textContent = p.name;
+    if (p.you) {
+      var yous = document.createElement('span');
+      yous.className = 'yous'; yous.textContent = ' (you)';
+      n.appendChild(yous);
+    }
     if (p.admin) n.appendChild(adminStar());
     t.appendChild(n);
     /* In All USA everyone is from somewhere else, so name the place in
@@ -2244,7 +2314,14 @@
        when it is not — either way both are one tap apart. */
     setSideView(open ? 'chat' : 'people');
     if (open) loadUpcoming();
-    else { unreadTab = 0; }
+    else {
+      unreadTab = 0;
+      /* The conversation is loaded while Talk Time is in front of it, and
+         a hidden box has no height to scroll — so it is put at the newest
+         message here, the moment it is actually shown. */
+      var c = $('chat');
+      c.scrollTop = c.scrollHeight;
+    }
     renderVoice(lastVoiceList);
   }
 
@@ -2931,7 +3008,12 @@
       $('cty').value = me.city || '';
       sel.value = me.state;
       cityHint();
-      openRoom(byAbbr(wantVoice || me.state));
+      /* Everyone lands in All USA, in Talk Time: one room with everybody
+         in it beats fifty quiet ones, until there is enough going on for
+         the state rooms to hold their own. Their own room is one tap away.
+         A pop-out tab is the exception — it was sent somewhere specific. */
+      openRoom(byAbbr(wantVoice || 'US'));
+      if (!wantVoice) showTalk(true);
       if (wantVoice && !framed) {
         showTalk(true);
         /* Never grab the microphone unasked. Phones only hand it over —

@@ -194,7 +194,9 @@ button,input,select,textarea{font-family:inherit}
 .st.mine{border-color:var(--red)}
 
 /* ── room ── */
-.room{flex:1;display:grid;grid-template-columns:186px 1fr 186px;min-height:0}
+/* Three columns whose outer two can be moved: the rail folds away on a
+   button, and the side column is dragged wider or narrower by its grip. */
+.room{flex:1;display:grid;grid-template-columns:186px 1fr 5px var(--sidew,186px);min-height:0}
 .rail{border-right:1px solid var(--line);background:var(--deep);padding:14px 10px;overflow-y:auto;min-height:0;
   display:flex;flex-direction:column;gap:2px}
 .rl{font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint2);padding:8px 8px 5px}
@@ -215,8 +217,24 @@ button,input,select,textarea{font-family:inherit}
 
 /* A member belongs to one state, so there is no list to browse — the rail
    comes out entirely and the state name carries the identity of the room. */
-.room.solo{grid-template-columns:1fr 200px}
+.room.solo{grid-template-columns:1fr 5px var(--sidew,200px)}
 .room.solo .rail{display:none}
+/* The rooms list, folded out of the way. A hidden grid item is not a
+   narrow one — it leaves the grid entirely, and the columns behind it
+   shuffle up — so the folded shape declares three columns, not four with
+   a nothing at the front. */
+.room.railshut{grid-template-columns:1fr 5px var(--sidew,186px)}
+.room.railshut .rail{display:none}
+.railbtn{background:none;border:1px solid var(--edge);border-radius:7px;color:var(--dim);
+  font-size:14px;line-height:1;padding:6px 9px;cursor:pointer;flex:0 0 auto}
+.railbtn:hover{background:var(--panel);color:var(--text)}
+.railbtn[aria-expanded="false"]{border-color:var(--line2);color:var(--paper);background:var(--panel)}
+
+/* the grip between the conversation and the side column */
+.grip{cursor:col-resize;background:var(--line);position:relative;touch-action:none}
+.grip::after{content:"";position:absolute;inset:0 -4px;}
+.grip:hover,.grip.dragging{background:var(--red)}
+.room.dragging{user-select:none}
 
 /* min-height:0 is what lets the middle column SHRINK to the frame instead
    of growing with its messages — without it, a long conversation pushes
@@ -340,7 +358,12 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sidechat .sm2 .n .tm{font-family:var(--mono);font-size:9px;color:var(--faint2);font-weight:400;margin-left:5px}
 .sidechat .sm2 .x{font-size:12px;color:var(--dim);line-height:1.45;overflow-wrap:anywhere;white-space:pre-wrap}
-.sidechat .sm2.mine .n{color:var(--teal2)}
+/* Your own contributions wear your colour: the name in flag red and a
+   red ring round your picture, so your line is found at a glance. */
+.sidechat .sm2.mine .n{color:var(--red2)}
+.sidechat .sm2.mine .av{box-shadow:0 0 0 2px var(--red)}
+.m.mine .av{box-shadow:0 0 0 2px var(--red)}
+.wp .n .yous{color:var(--red2);font-weight:700}
 .sidechat .none{font-size:11.5px;color:var(--faint2);padding:6px 2px}
 .sidecmp{display:flex;gap:6px;align-items:center;flex:0 0 auto}
 .sidecmp input{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line2);color:var(--text);
@@ -400,9 +423,12 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
 
 @media (max-width:860px){
   .room{grid-template-columns:1fr}
-  .rail,aside.who{display:none}
+  .rail,aside.who,.grip{display:none}
+  .railbtn{display:none}
   /* ...except during Talk Time, where typing alongside the talk is the
      whole point. It sits under the stage instead of beside it. */
+  .room{grid-template-columns:1fr}
+  .room.solo,.room.railshut{grid-template-columns:1fr}
   .room.talking{grid-template-rows:1fr auto}
   .room.talking aside.who{display:flex;border-left:0;border-top:1px solid var(--line);
     max-height:44vh;padding:8px 10px 10px}
@@ -461,8 +487,10 @@ aside.who{border-left:1px solid var(--line);background:var(--deep);padding:14px 
   font-family:var(--display);font-size:12px;font-weight:800;letter-spacing:.07em;
   text-transform:uppercase;padding:7px 16px;cursor:pointer;
   display:inline-flex;align-items:center;gap:5px;transition:background .15s,color .15s}
-#tabChat{border-radius:18px 0 0 18px;border-right-width:0;color:var(--teal2)}
-#tabTalk{border-radius:0 18px 18px 0;color:var(--red2)}
+.vtabs button:first-child{border-radius:18px 0 0 18px;border-right-width:0}
+.vtabs button:last-child{border-radius:0 18px 18px 0}
+#tabChat{color:var(--teal2)}
+#tabTalk{color:var(--red2)}
 #tabChat:hover{background:rgba(124,192,205,.12)}
 #tabTalk:hover{background:var(--redwash)}
 /* The half you are in is filled red in both pills; the half you are not

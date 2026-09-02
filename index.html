@@ -90,14 +90,16 @@ addEventListener('error', function (e) {
 
       <div class="mid">
         <div class="top">
+          <button class="railbtn" type="button" id="railBtn" hidden aria-expanded="true"
+            title="Show or hide the list of rooms">☰</button>
           <span class="av" id="tAb" style="background:#BF3B2E;color:#FBF8F2">OH</span>
           <div class="ttl">
             <h1 id="tNm">Ohio</h1>
             <span class="meta" id="tCt"></span>
           </div>
           <div class="rswitch" role="tablist" aria-label="Rooms">
-            <button type="button" id="rsState" role="tab" aria-selected="true" title="Your own room"><span id="rsStateTxt">Your state</span><span class="pmic" id="rsStateMic" hidden>🎙</span><span class="pbadge" id="rsStateN" hidden></span></button>
-            <button type="button" id="rsUsa" role="tab" aria-selected="false" title="The room the whole community shares"><span id="rsUsaTxt">🇺🇸 All USA</span><span class="pmic" id="rsUsaMic" hidden>🎙</span><span class="pbadge" id="rsUsaN" hidden></span></button>
+            <button type="button" id="rsUsa" role="tab" aria-selected="true" title="The room the whole community shares"><span id="rsUsaTxt">🇺🇸 All USA</span><span class="pmic" id="rsUsaMic" hidden>🎙</span><span class="pbadge" id="rsUsaN" hidden></span></button>
+            <button type="button" id="rsState" role="tab" aria-selected="false" title="Your own room"><span id="rsStateTxt">Your state</span><span class="pmic" id="rsStateMic" hidden>🎙</span><span class="pbadge" id="rsStateN" hidden></span></button>
           </div>
           <div class="menuwrap">
             <button class="mebtn" type="button" id="meBtn2" aria-expanded="false">
@@ -116,8 +118,8 @@ addEventListener('error', function (e) {
         </div>
 
         <div class="vtabs" role="tablist" aria-label="Chat or Talk Time">
-          <button type="button" id="tabChat" role="tab" aria-selected="true" title="The written conversation in this room">💬 Chat<span class="pbadge" id="chatN" hidden></span></button>
-          <button type="button" id="tabTalk" role="tab" aria-selected="false" title="Talk Time — listen in, or take the mic and speak">🎙 Talk Time<span class="livedot" id="talkLive" hidden></span></button>
+          <button type="button" id="tabTalk" role="tab" aria-selected="true" title="Talk Time — listen in, or take the mic and speak">🎙 Talk Time<span class="livedot" id="talkLive" hidden></span></button>
+          <button type="button" id="tabChat" role="tab" aria-selected="false" title="The written conversation in this room">💬 Chat<span class="pbadge" id="chatN" hidden></span></button>
         </div>
 
         <button class="livebanner" type="button" id="liveBanner" hidden title="Somebody is talking in All USA right now — tap to listen"></button>
@@ -206,6 +208,9 @@ addEventListener('error', function (e) {
           <button class="snd" type="submit" aria-label="Send">↑</button>
         </form>
       </div>
+
+      <div class="grip" id="grip" role="separator" aria-orientation="vertical"
+        title="Drag to make this side wider or narrower"></div>
 
       <aside class="who">
         <div class="sidetabs" role="tablist" aria-label="Chat or people">
